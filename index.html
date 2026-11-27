@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>專屬雲端看盤與畫線系統</title>
-  <script src="https://unpkg.com"></script>
+  <script src="https://jsdelivr.net"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -37,7 +37,7 @@
     button:hover { background-color: #363a45; }
     button.active { background-color: #2962ff; color: #fff; border-color: #2962ff; }
     button.danger { background-color: #b22833; color: #fff; border-color: #b22833; }
-    #chart-container { flex: 1; width: 100%; position: relative; }
+    #chart-container { flex: 1; width: 100%; min-height: 400px; position: relative; }
     .status-bar {
       padding: 6px 16px;
       font-size: 12px;
@@ -68,8 +68,8 @@
   <div id="chart-container"></div>
 
   <div class="status-bar">
-    <span id="status-text">提示：點擊上方「點擊畫水平線」後，在圖表任意價位點擊即可畫線。</span>
-    <span>儲存模式：本機暫存 (下一步升級雲端同步)</span>
+    <span id="status-text">系統初始化中...</span>
+    <span>儲存模式：本機暫存</span>
   </div>
 
   <script>
@@ -79,112 +79,118 @@
     const clearBtn = document.getElementById('clear-lines-btn');
     const statusText = document.getElementById('status-text');
 
-    let isDrawMode = false;
-    let priceLines = [];
-    let currentSymbol = symbolSelect.value;
+    if (typeof LightweightCharts === 'undefined') {
+      statusText.textContent = '❌ 圖表引擎載入失敗（網路可能封鎖了外部 CDN 資源）';
+    } else {
+      let isDrawMode = false;
+      let priceLines = [];
+      let currentSymbol = symbolSelect.value;
 
-    const chart = LightweightCharts.createChart(chartContainer, {
-      layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
-      grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
-      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#2a2e39' },
-      timeScale: { borderColor: '#2a2e39', timeVisible: true },
-    });
-
-    const candleSeries = chart.addCandlestickSeries({
-      upColor: '#26a69a', downColor: '#ef5350',
-      borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350',
-    });
-
-    function getStorageKey() {
-      return `chart_lines_${currentSymbol}`;
-    }
-
-    function saveLinesToLocal() {
-      const prices = priceLines.map(line => line.options().price);
-      localStorage.setItem(getStorageKey(), JSON.stringify(prices));
-    }
-
-    function addHorizontalLine(price, save = true) {
-      const line = candleSeries.createPriceLine({
-        price: price,
-        color: '#2962ff',
-        lineWidth: 2,
-        lineStyle: LightweightCharts.LineStyle.Solid,
-        axisLabelVisible: true,
-        title: '支撐/壓力',
+      const chart = LightweightCharts.createChart(chartContainer, {
+        width: chartContainer.clientWidth || window.innerWidth,
+        height: chartContainer.clientHeight || (window.innerHeight - 90),
+        layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
+        grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        rightPriceScale: { borderColor: '#2a2e39' },
+        timeScale: { borderColor: '#2a2e39', timeVisible: true },
       });
-      priceLines.push(line);
-      if (save) saveLinesToLocal();
-    }
 
-    function clearAllLines(clearStorage = true) {
-      priceLines.forEach(line => candleSeries.removePriceLine(line));
-      priceLines = [];
-      if (clearStorage) localStorage.removeItem(getStorageKey());
-    }
+      const candleSeries = chart.addCandlestickSeries({
+        upColor: '#26a69a', downColor: '#ef5350',
+        borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+      });
 
-    function loadSavedLines() {
-      clearAllLines(false);
-      const saved = JSON.parse(localStorage.getItem(getStorageKey()) || '[]');
-      saved.forEach(price => addHorizontalLine(price, false));
-    }
-
-    async function loadMarketData(symbol) {
-      statusText.textContent = `正在載入 ${symbol} K 線資料...`;
-      try {
-        const res = await fetch(`https://binance.com{symbol}&interval=1h&limit=200`);
-        const data = await res.json();
-        const candles = data.map(item => ({
-          time: Number(item.at(0)) / 1000,
-          open: Number(item.at(1)),
-          high: Number(item.at(2)),
-          low: Number(item.at(3)),
-          close: Number(item.at(4)),
-        }));
-        candleSeries.setData(candles);
-        chart.timeScale().fitContent();
-        loadSavedLines();
-        statusText.textContent = `已載入 ${symbol} (1小時K) | 已恢復 ${priceLines.length} 條畫線`;
-      } catch (err) {
-        statusText.textContent = '載入資料失敗，請檢查網路連線。';
+      function getStorageKey() {
+        return `chart_lines_${currentSymbol}`;
       }
-    }
 
-    drawBtn.addEventListener('click', () => {
-      isDrawMode = !isDrawMode;
-      drawBtn.classList.toggle('active', isDrawMode);
-      statusText.textContent = isDrawMode
-        ? '🟢 畫線模式開啟：請在圖表上點擊想要標記的價格位置'
-        : '提示：點擊上方「點擊畫水平線」後，在圖表任意價位點擊即可畫線。';
-    });
-
-    clearBtn.addEventListener('click', () => {
-      clearAllLines(true);
-      statusText.textContent = '已清除此商品的所有畫線。';
-    });
-
-    chart.subscribeClick((param) => {
-      if (!isDrawMode || !param.point) return;
-      const price = candleSeries.coordinateToPrice(param.point.y);
-      if (price !== null) {
-        addHorizontalLine(Number(price.toFixed(2)), true);
-        isDrawMode = false;
-        drawBtn.classList.remove('active');
-        statusText.textContent = `已新增水平線於價格 ${price.toFixed(2)}（已自動保存）`;
+      function saveLinesToLocal() {
+        const prices = priceLines.map(line => line.options().price);
+        localStorage.setItem(getStorageKey(), JSON.stringify(prices));
       }
-    });
 
-    symbolSelect.addEventListener('change', (e) => {
-      currentSymbol = e.target.value;
+      function addHorizontalLine(price, save = true) {
+        const line = candleSeries.createPriceLine({
+          price: price,
+          color: '#2962ff',
+          lineWidth: 2,
+          lineStyle: LightweightCharts.LineStyle.Solid,
+          axisLabelVisible: true,
+          title: '支撐/壓力',
+        });
+        priceLines.push(line);
+        if (save) saveLinesToLocal();
+      }
+
+      function clearAllLines(clearStorage = true) {
+        priceLines.forEach(line => candleSeries.removePriceLine(line));
+        priceLines = [];
+        if (clearStorage) localStorage.removeItem(getStorageKey());
+      }
+
+      function loadSavedLines() {
+        clearAllLines(false);
+        const saved = JSON.parse(localStorage.getItem(getStorageKey()) || '[]');
+        saved.forEach(price => addHorizontalLine(price, false));
+      }
+
+      async function loadMarketData(symbol) {
+        statusText.textContent = `正在載入 ${symbol} K 線資料...`;
+        try {
+          const res = await fetch(`https://binance.com{symbol}&interval=1h&limit=200`);
+          const data = await res.json();
+          const candles = data.map(item => ({
+            time: Number(item.at(0)) / 1000,
+            open: Number(item.at(1)),
+            high: Number(item.at(2)),
+            low: Number(item.at(3)),
+            close: Number(item.at(4)),
+          }));
+          candleSeries.setData(candles);
+          chart.timeScale().fitContent();
+          loadSavedLines();
+          statusText.textContent = `✅ 已載入 ${symbol} (1小時K) | 已恢復 ${priceLines.length} 條畫線`;
+        } catch (err) {
+          statusText.textContent = `❌ 行情 API 連線失敗：${err.message}`;
+        }
+      }
+
+      drawBtn.addEventListener('click', () => {
+        isDrawMode = !isDrawMode;
+        drawBtn.classList.toggle('active', isDrawMode);
+        statusText.textContent = isDrawMode
+          ? '🟢 畫線模式開啟：請在圖表上點擊想要標記的價格位置'
+          : '提示：點擊上方「點擊畫水平線」後，在圖表任意價位點擊即可畫線。';
+      });
+
+      clearBtn.addEventListener('click', () => {
+        clearAllLines(true);
+        statusText.textContent = '已清除此商品的所有畫線。';
+      });
+
+      chart.subscribeClick((param) => {
+        if (!isDrawMode || !param.point) return;
+        const price = candleSeries.coordinateToPrice(param.point.y);
+        if (price !== null) {
+          addHorizontalLine(Number(price.toFixed(2)), true);
+          isDrawMode = false;
+          drawBtn.classList.remove('active');
+          statusText.textContent = `已新增水平線於價格 ${price.toFixed(2)}（已自動保存）`;
+        }
+      });
+
+      symbolSelect.addEventListener('change', (e) => {
+        currentSymbol = e.target.value;
+        loadMarketData(currentSymbol);
+      });
+
+      window.addEventListener('resize', () => {
+        chart.applyOptions({ width: chartContainer.clientWidth, height: chartContainer.clientHeight });
+      });
+
       loadMarketData(currentSymbol);
-    });
-
-    window.addEventListener('resize', () => {
-      chart.applyOptions({ width: chartContainer.clientWidth, height: chartContainer.clientHeight });
-    });
-
-    loadMarketData(currentSymbol);
+    }
   </script>
 </body>
 </html>
