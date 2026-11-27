@@ -29,9 +29,9 @@ function initApp() {
   const favBtn = document.getElementById('fav-btn'), colorSelect = document.getElementById('color-select'), drawBtn = document.getElementById('draw-hline-btn'), clearBtn = document.getElementById('clear-lines-btn');
   let isDrawMode = false, priceLines = [], currentSymbol = symbolSelect.value, currentInterval = intervalSelect.value, unsub = null, liveTimer = null, favList = [];
 
-  const baseOpts = { layout: { background: { color: '#131722' }, textColor: '#d1d4dc' }, grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } }, rightPriceScale: { borderColor: '#2a2e39', minimumWidth: 75 } };
-  const chart = LightweightCharts.createChart(chartContainer, { ...baseOpts, width: chartContainer.clientWidth || window.innerWidth, height: chartContainer.clientHeight || Math.floor(window.innerHeight * 0.72), timeScale: { visible: false } });
-  const volChart = LightweightCharts.createChart(volumeContainer, { ...baseOpts, width: volumeContainer.clientWidth || window.innerWidth, height: volumeContainer.clientHeight || Math.floor(window.innerHeight * 0.18), timeScale: { borderColor: '#2a2e39', timeVisible: true } });
+  const baseOpts = { autoSize: true, layout: { background: { color: '#131722' }, textColor: '#d1d4dc' }, grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } }, rightPriceScale: { borderColor: '#2a2e39', minimumWidth: 80 } };
+  const chart = LightweightCharts.createChart(chartContainer, { ...baseOpts, timeScale: { visible: false } });
+  const volChart = LightweightCharts.createChart(volumeContainer, { ...baseOpts, timeScale: { borderColor: '#2a2e39', timeVisible: true } });
 
   const candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' });
   const volumeSeries = volChart.addHistogramSeries({ priceFormat: { type: 'volume' } });
@@ -65,10 +65,7 @@ function initApp() {
     const rangeMap = { '60m': '1mo', '1d': '2y', '1wk': '5y', '1mo': '10y' };
     const yUrl = 'https://' + 'query1.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${rangeMap[intv] || '1y'}`;
     const myWorker = 'https://' + 'yahoo-proxy.slaveandpoor' + `.workers.dev/?url=${encodeURIComponent(yUrl)}`;
-    try {
-      const res = await fetch(myWorker);
-      if (res.ok) return parseYahoo(await res.text());
-    } catch (e) {}
+    try { const res = await fetch(myWorker); if (res.ok) return parseYahoo(await res.text()); } catch (e) {}
     return null;
   }
 
@@ -119,6 +116,5 @@ function initApp() {
   intervalSelect.onchange = e => { currentInterval = e.target.value; switchSymbol(currentSymbol); };
   searchBtn.onclick = () => switchSymbol(customInput.value);
   customInput.onkeydown = e => { if (e.key === 'Enter') switchSymbol(customInput.value); };
-  window.onresize = () => { chart.applyOptions({ width: chartContainer.clientWidth, height: chartContainer.clientHeight }); volChart.applyOptions({ width: volumeContainer.clientWidth, height: volumeContainer.clientHeight }); };
   switchSymbol(currentSymbol);
 }
