@@ -8,15 +8,24 @@ const loadAny = (urls, name) => new Promise(async (resolve, reject) => {
 
 (async () => {
   try {
-    await loadAny(['https://' + 'cdn.jsdelivr.net' + '/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js', 'https://' + 'unpkg.com' + '/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js'], '圖表');
-    await loadAny(['https://' + '://gstatic.com' + '/firebasejs/10.12.2/firebase-app-compat.js', 'https://' + 'cdn.jsdelivr.net' + '/npm/firebase@10.12.2/firebase-app-compat.js'], 'Firebase');
-    await loadAny(['https://' + '://gstatic.com' + '/firebasejs/10.12.2/firebase-firestore-compat.js', 'https://' + 'cdn.jsdelivr.net' + '/npm/firebase@10.12.2/firebase-firestore-compat.js'], 'Firestore');
+    const jsd = 'https://' + 'cdn.jsdelivr' + '.net';
+    const gst = 'https://' + 'www.gstatic' + '.com';
+    await loadAny([jsd + '/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js', 'https://' + 'unpkg' + '.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js'], '圖表');
+    await loadAny([gst + '/firebasejs/10.12.2/firebase-app-compat.js', jsd + '/npm/firebase@10.12.2/firebase-app-compat.js'], 'Firebase');
+    await loadAny([gst + '/firebasejs/10.12.2/firebase-firestore-compat.js', jsd + '/npm/firebase@10.12.2/firebase-firestore-compat.js'], 'Firestore');
     initApp();
   } catch (e) { statusBadge.style.color = '#ef5350'; statusBadge.textContent = `❌ ${e.message}`; }
 })();
 
 function initApp() {
-  firebase.initializeApp({ apiKey: "AIzaSyCuVx7WNM4P6FA38p7iWHDnY4s1lz7lnRI", authDomain: "://firebaseapp.com", projectId: "my-trading-chart", storageBucket: "my-trading-chart.firebasestorage.app", messagingSenderId: "465125050422", appId: "1:465125050422:web:4c2b050ab549c675767097" });
+  firebase.initializeApp({
+    apiKey: "AIzaSyCuVx7WNM4P6FA38p7iWHDnY4s1lz7lnRI",
+    authDomain: "my-trading-chart" + ".firebaseapp.com",
+    projectId: "my-trading-chart",
+    storageBucket: "my-trading-chart" + ".firebasestorage.app",
+    messagingSenderId: "465125050422",
+    appId: "1:465125050422:web:4c2b050ab549c675767097"
+  });
   const db = firebase.firestore();
   const chartContainer = document.getElementById('chart-container'), symbolSelect = document.getElementById('symbol-select'), intervalSelect = document.getElementById('interval-select');
   const customInput = document.getElementById('custom-symbol'), searchBtn = document.getElementById('search-btn'), colorSelect = document.getElementById('color-select'), drawBtn = document.getElementById('draw-hline-btn'), clearBtn = document.getElementById('clear-lines-btn');
@@ -36,12 +45,12 @@ function initApp() {
 
   async function fetchCandles(sym, intv) {
     if (sym.endsWith('USDT')) {
-      const res = await fetch('https://' + '://binance.com' + `/api/v3/klines?symbol=${sym}&interval=${intv}&limit=200`);
+      const res = await fetch('https://' + 'api.binance' + `.com/api/v3/klines?symbol=${sym}&interval=${intv}&limit=200`);
       return (await res.json()).map(d => ({ time: Number(d.at(0))/1000, open: Number(d.at(1)), high: Number(d.at(2)), low: Number(d.at(3)), close: Number(d.at(4)) }));
     }
     const range = intv === '1d' ? '1y' : (intv === '1h' ? '1mo' : '5d');
-    const yUrl = 'https://' + '://yahoo.com' + `/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${range}`;
-    for (const pUrl of ['https://' + 'api.allorigins.win' + `/raw?url=${encodeURIComponent(yUrl)}`, 'https://' + 'corsproxy.io' + `/?${encodeURIComponent(yUrl)}`]) {
+    const yUrl = 'https://' + 'query1.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${range}`;
+    for (const pUrl of ['https://' + 'api.allorigins' + `.win/raw?url=${encodeURIComponent(yUrl)}`, 'https://' + 'corsproxy' + `.io/?${encodeURIComponent(yUrl)}`]) {
       try {
         const res = await fetch(pUrl); if (!res.ok) continue;
         const r = (await res.json()).chart.result.at(0), q = r.indicators.quote.at(0);
