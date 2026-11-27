@@ -19,6 +19,8 @@
     #charts-wrapper { flex: 1 1 auto; display: flex; flex-direction: column; width: 100%; min-height: 0; overflow: hidden; }
     #chart-container { flex: 4 1 0; width: 100%; min-height: 0; position: relative; border-bottom: 2px solid #363a45; }
     #volume-container { flex: 1 1 0; width: 100%; min-height: 0; position: relative; }
+    #ohlc-legend { position: absolute; top: 8px; left: 12px; z-index: 10; font-size: 13px; background: rgba(19, 23, 34, 0.78); padding: 4px 10px; border-radius: 4px; pointer-events: none; line-height: 1.5; }
+    #vol-legend { position: absolute; top: 4px; left: 12px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.78); padding: 2px 8px; border-radius: 4px; pointer-events: none; color: #9598a1; }
   </style>
 </head>
 <body>
@@ -29,11 +31,10 @@
         <optgroup id="fav-group" label="⭐ 我的雲端自選股"></optgroup>
         <optgroup label="🇹🇼 台灣指數與熱門股">
           <option value="^TWII">台灣加權指數 (^TWII)</option>
-          <option value="^TWO">台灣櫃買指數 (^TWO)</option>
-          <option value="2330.TW" selected>台積電 (2330)</option>
-          <option value="0050.TW">元大台灣50 (0050)</option>
-          <option value="00878.TW">國泰永續高股息 (00878)</option>
-          <option value="8069.TWO">元太-上櫃 (8069)</option>
+          <option value="2330.TW" selected>台積電 (2330.TW)</option>
+          <option value="0050.TW">元大台灣50 (0050.TW)</option>
+          <option value="00878.TW">國泰永續高股息 (00878.TW)</option>
+          <option value="8069.TWO">元太 (8069.TWO)</option>
         </optgroup>
         <optgroup label="🇺🇸 美國指數與熱門股">
           <option value="^GSPC">標普 500 (^GSPC)</option>
@@ -77,9 +78,9 @@
     </div>
   </header>
   <div id="charts-wrapper">
-    <div id="chart-container"></div>
-    <div id="volume-container"></div>
+    <div id="chart-container"><div id="ohlc-legend">載入中...</div></div>
+    <div id="volume-container"><div id="vol-legend">成交量</div></div>
   </div>
-  <script src="./app.js?v=16"></script>
+  <script src="./app.js?v=17"></script>
 </body>
 </html>
