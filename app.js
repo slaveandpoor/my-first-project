@@ -49,15 +49,22 @@ function initApp() {
       return (await res.json()).map(d => ({ time: Number(d.at(0))/1000, open: Number(d.at(1)), high: Number(d.at(2)), low: Number(d.at(3)), close: Number(d.at(4)) }));
     }
     const range = intv === '1d' ? '1y' : (intv === '1h' ? '1mo' : '5d');
-    const yUrl = 'https://' + 'query1.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${range}`;
-    for (const pUrl of ['https://' + 'api.allorigins' + `.win/raw?url=${encodeURIComponent(yUrl)}`, 'https://' + 'corsproxy' + `.io/?${encodeURIComponent(yUrl)}`]) {
+    const yUrl = 'https://' + 'query2.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${range}`;
+    const proxies = [
+      'https://' + 'api.codetabs' + `.com/v1/proxy?quest=${encodeURIComponent(yUrl)}`,
+      'https://' + 'thingproxy.freeboard' + `.io/fetch/${yUrl}`,
+      'https://' + 'api.allorigins' + `.win/get?url=${encodeURIComponent(yUrl)}`
+    ];
+    for (const pUrl of proxies) {
       try {
         const res = await fetch(pUrl); if (!res.ok) continue;
-        const r = (await res.json()).chart.result.at(0), q = r.indicators.quote.at(0);
+        let json = await res.json();
+        if (json.contents) json = JSON.parse(json.contents);
+        const r = json.chart.result.at(0), q = r.indicators.quote.at(0);
         return r.timestamp.map((t, i) => ({ time: t, open: q.open.at(i), high: q.high.at(i), low: q.low.at(i), close: q.close.at(i) })).filter(c => c.open !== null && c.close !== null);
       } catch (e) {}
     }
-    throw new Error('查無代號或連線逾時');
+    throw new Error('Proxy 連線逾時，請稍後重試');
   }
 
   async function loadData(sym, intv, silent = false) {
