@@ -3,78 +3,62 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>專屬雲端看盤與畫線系統</title>
+  <title>專屬雲端看盤與畫線同步系統</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background-color: #131722;
-      color: #d1d4dc;
+      width: 100%; height: 100%; overflow: hidden;
+      background-color: #131722; color: #d1d4dc;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    body {
-      display: flex;
-      flex-direction: column;
-    }
+    body { display: flex; flex-direction: column; }
     header {
-      flex: 0 0 52px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 16px;
-      background-color: #1e222d;
-      border-bottom: 1px solid #2a2e39;
-      gap: 10px;
+      flex: 0 0 auto; min-height: 52px;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      padding: 8px 14px; background-color: #1e222d; border-bottom: 1px solid #2a2e39; gap: 8px;
     }
-    .title-area { display: flex; align-items: center; gap: 10px; }
+    .group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     h1 { font-size: 15px; font-weight: 600; color: #ffffff; white-space: nowrap; }
     #status-badge {
-      font-size: 12px;
-      padding: 4px 10px;
-      border-radius: 4px;
-      background-color: #2a2e39;
-      color: #4caf50;
-      max-width: 45vw;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-size: 12px; padding: 4px 10px; border-radius: 4px;
+      background-color: #2a2e39; color: #4caf50; white-space: nowrap;
     }
     select, button {
-      background-color: #2a2e39;
-      color: #d1d4dc;
-      border: 1px solid #363a45;
-      padding: 6px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 13px;
-      white-space: nowrap;
+      background-color: #2a2e39; color: #d1d4dc; border: 1px solid #363a45;
+      padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap;
     }
     button:hover { background-color: #363a45; }
     button.active { background-color: #2962ff; color: #fff; border-color: #2962ff; }
     button.danger { background-color: #b22833; color: #fff; border-color: #b22833; }
-    #chart-container {
-      flex: 1 1 auto;
-      width: 100%;
-      position: relative;
-    }
+    #chart-container { flex: 1 1 auto; width: 100%; position: relative; }
   </style>
 </head>
 <body>
   <header>
-    <div class="title-area">
-      <h1>📈 專屬看盤</h1>
+    <div class="group">
+      <h1>📈 雲端看盤</h1>
       <select id="symbol-select">
         <option value="BTCUSDT">BTC / USDT</option>
         <option value="ETHUSDT">ETH / USDT</option>
         <option value="SOLUSDT">SOL / USDT</option>
       </select>
-      <span id="status-badge">⏳ 初始化中...</span>
+      <select id="interval-select">
+        <option value="15m">15分K</option>
+        <option value="1h" selected>1小時K</option>
+        <option value="4h">4小時K</option>
+        <option value="1d">日K</option>
+      </select>
+      <span id="status-badge">⏳ 啟動中...</span>
     </div>
-    <div class="tools">
+    <div class="group">
+      <select id="color-select" title="選擇畫線顏色">
+        <option value="#2962ff">🔵 藍色線</option>
+        <option value="#26a69a">🟢 綠色支撐</option>
+        <option value="#ef5350">🔴 紅色壓力</option>
+        <option value="#ffeb3b">🟡 黃色警戒</option>
+      </select>
       <button id="draw-hline-btn">➕ 畫水平線</button>
-      <button id="clear-lines-btn" class="danger">🗑️ 清除</button>
+      <button id="clear-lines-btn" class="danger">🗑️ 清除雲端線條</button>
     </div>
   </header>
 
@@ -82,37 +66,58 @@
 
   <script>
     const statusBadge = document.getElementById('status-badge');
-    const cdnList = [
-      'https://' + 'cdn.jsdelivr.net' + '/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js',
-      'https://' + 'unpkg.com' + '/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js',
-      'https://' + '://cloudflare.com' + '/ajax/libs/lightweight-charts/4.2.0/lightweight-charts.standalone.production.js'
-    ];
 
-    function loadScriptWithFallback(index = 0) {
-      if (index >= cdnList.length) {
-        statusBadge.style.color = '#ef5350';
-        statusBadge.textContent = '❌ 所有圖表 CDN 皆被網路阻擋';
-        return;
-      }
-      statusBadge.textContent = `⏳ 載入圖表引擎 (${index + 1}/${cdnList.length})...`;
-      const s = document.createElement('script');
-      s.src = cdnList[index];
-      s.onload = () => initApp();
-      s.onerror = () => loadScriptWithFallback(index + 1);
-      document.head.appendChild(s);
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
     }
 
-    loadScriptWithFallback(0);
+    async function bootstrap() {
+      try {
+        statusBadge.textContent = '⏳ 載入圖表與雲端引擎...';
+        const gstaticBase = 'https://' + '://gstatic.com' + '/firebasejs/10.12.2/';
+        await loadScript('https://' + 'cdn.jsdelivr.net' + '/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js');
+        await loadScript(gstaticBase + 'firebase-app-compat.js');
+        await loadScript(gstaticBase + 'firebase-firestore-compat.js');
+        initApp();
+      } catch (err) {
+        statusBadge.style.color = '#ef5350';
+        statusBadge.textContent = '❌ 外部元件載入失敗，請檢查網路';
+      }
+    }
+
+    bootstrap();
 
     function initApp() {
+      const firebaseConfig = {
+        apiKey: "AIzaSyCuVx7WNM4P6FA38p7iWHDnY4s1lz7lnRI",
+        authDomain: "://firebaseapp.com",
+        projectId: "my-trading-chart",
+        storageBucket: "my-trading-chart.firebasestorage.app",
+        messagingSenderId: "465125050422",
+        appId: "1:465125050422:web:4c2b050ab549c675767097"
+      };
+
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+
       const chartContainer = document.getElementById('chart-container');
       const symbolSelect = document.getElementById('symbol-select');
+      const intervalSelect = document.getElementById('interval-select');
+      const colorSelect = document.getElementById('color-select');
       const drawBtn = document.getElementById('draw-hline-btn');
       const clearBtn = document.getElementById('clear-lines-btn');
 
       let isDrawMode = false;
       let priceLines = [];
       let currentSymbol = symbolSelect.value;
+      let currentInterval = intervalSelect.value;
+      let unsubscribeCloud = null;
 
       const chart = LightweightCharts.createChart(chartContainer, {
         width: chartContainer.clientWidth || window.innerWidth,
@@ -129,44 +134,49 @@
         borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350',
       });
 
-      function getStorageKey() { return `chart_lines_${currentSymbol}`; }
-
-      function saveLinesToLocal() {
-        const prices = priceLines.map(line => line.options().price);
-        localStorage.setItem(getStorageKey(), JSON.stringify(prices));
-      }
-
-      function addHorizontalLine(price, save = true) {
-        const line = candleSeries.createPriceLine({
-          price: price,
-          color: '#2962ff',
-          lineWidth: 2,
-          lineStyle: LightweightCharts.LineStyle.Solid,
-          axisLabelVisible: true,
-          title: '支撐/壓力',
-        });
-        priceLines.push(line);
-        if (save) saveLinesToLocal();
-      }
-
-      function clearAllLines(clearStorage = true) {
+      function renderCloudLines(linesData) {
         priceLines.forEach(line => candleSeries.removePriceLine(line));
         priceLines = [];
-        if (clearStorage) localStorage.removeItem(getStorageKey());
+        linesData.forEach(item => {
+          const line = candleSeries.createPriceLine({
+            price: item.price,
+            color: item.color || '#2962ff',
+            lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Solid,
+            axisLabelVisible: true,
+            title: item.label || '雲端標記',
+          });
+          priceLines.push(line);
+        });
       }
 
-      function loadSavedLines() {
-        clearAllLines(false);
-        const saved = JSON.parse(localStorage.getItem(getStorageKey()) || '[]');
-        saved.forEach(price => addHorizontalLine(price, false));
+      function subscribeToCloudLines(symbol) {
+        if (unsubscribeCloud) unsubscribeCloud();
+        unsubscribeCloud = db.collection('chart_drawings').doc(symbol).onSnapshot((doc) => {
+          const data = doc.exists ? (doc.data().lines || []) : [];
+          renderCloudLines(data);
+          statusBadge.style.color = '#4caf50';
+          statusBadge.textContent = `☁️ 雲端已同步 | ${symbol} (${priceLines.length} 條線)`;
+        }, (err) => {
+          statusBadge.style.color = '#ef5350';
+          statusBadge.textContent = `❌ 雲端權限錯誤：${err.code}`;
+        });
       }
 
-      async function loadMarketData(symbol) {
+      async function saveLineToCloud(newLine) {
+        const docRef = db.collection('chart_drawings').doc(currentSymbol);
+        await docRef.set({
+          lines: firebase.firestore.FieldValue.arrayUnion(newLine),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
+
+      async function loadMarketData(symbol, interval) {
         statusBadge.style.color = '#ffeb3b';
-        statusBadge.textContent = `⏳ 讀取 ${symbol} 行情...`;
+        statusBadge.textContent = `⏳ 讀取 ${symbol} (${interval})...`;
         const endpoints = [
-          'https://' + '://binance.com' + `/api/v3/klines?symbol=${symbol}&interval=1h&limit=200`,
-          'https://' + 'data-api.binance.vision' + `/api/v3/klines?symbol=${symbol}&interval=1h&limit=200`
+          'https://' + '://binance.com' + `/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=200`,
+          'https://' + 'data-api.binance.vision' + `/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=200`
         ];
 
         for (const url of endpoints) {
@@ -183,9 +193,7 @@
             }));
             candleSeries.setData(candles);
             chart.timeScale().fitContent();
-            loadSavedLines();
-            statusBadge.style.color = '#4caf50';
-            statusBadge.textContent = `✅ ${symbol} (1H) | ${priceLines.length} 條線`;
+            subscribeToCloudLines(symbol);
             return;
           } catch (e) {}
         }
@@ -197,36 +205,46 @@
         isDrawMode = !isDrawMode;
         drawBtn.classList.toggle('active', isDrawMode);
         statusBadge.style.color = isDrawMode ? '#2962ff' : '#4caf50';
-        statusBadge.textContent = isDrawMode ? '🟢 請點擊圖表價位畫線' : `✅ ${currentSymbol} (1H) | ${priceLines.length} 條線`;
+        statusBadge.textContent = isDrawMode
+          ? '🟢 請點擊圖表欲標記的價格'
+          : `☁️ 雲端已同步 | ${currentSymbol} (${priceLines.length} 條線)`;
       });
 
-      clearBtn.addEventListener('click', () => {
-        clearAllLines(true);
-        statusBadge.textContent = `🗑️ 已清除所有線條`;
+      clearBtn.addEventListener('click', async () => {
+        await db.collection('chart_drawings').doc(currentSymbol).set({ lines: [] });
       });
 
-      chart.subscribeClick((param) => {
+      chart.subscribeClick(async (param) => {
         if (!isDrawMode || !param.point) return;
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (price !== null) {
-          addHorizontalLine(Number(price.toFixed(2)), true);
           isDrawMode = false;
           drawBtn.classList.remove('active');
-          statusBadge.style.color = '#4caf50';
-          statusBadge.textContent = `✅ 已畫線 @ ${price.toFixed(2)}`;
+          statusBadge.textContent = '⏳ 正在寫入雲端...';
+          await saveLineToCloud({
+            price: Number(price.toFixed(2)),
+            color: colorSelect.value,
+            label: '支撐/壓力',
+            createdAt: Date.now()
+          });
         }
       });
 
       symbolSelect.addEventListener('change', (e) => {
         currentSymbol = e.target.value;
-        loadMarketData(currentSymbol);
+        loadMarketData(currentSymbol, currentInterval);
+      });
+
+      intervalSelect.addEventListener('change', (e) => {
+        currentInterval = e.target.value;
+        loadMarketData(currentSymbol, currentInterval);
       });
 
       window.addEventListener('resize', () => {
         chart.applyOptions({ width: chartContainer.clientWidth, height: chartContainer.clientHeight });
       });
 
-      loadMarketData(currentSymbol);
+      loadMarketData(currentSymbol, currentInterval);
     }
   </script>
 </body>
