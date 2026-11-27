@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>全球雲端看盤與畫線系統</title>
+  <title>全球全市場雲端看盤系統</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #131722; color: #d1d4dc; font-family: sans-serif; display: flex; flex-direction: column; }
-    header { flex: 0 0 auto; min-height: 52px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 8px 14px; background: #1e222d; border-bottom: 1px solid #2a2e39; gap: 8px; }
+    header { flex: 0 0 auto; min-height: 52px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 8px 14px; background: #1e222d; border-bottom: 1px solid #2a2e39; gap: 6px; }
     .group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     h1 { font-size: 15px; color: #fff; }
     #status-badge { font-size: 12px; padding: 4px 10px; border-radius: 4px; background: #2a2e39; color: #4caf50; }
     select, input, button { background: #2a2e39; color: #d1d4dc; border: 1px solid #363a45; padding: 5px 8px; border-radius: 4px; font-size: 13px; }
-    input { width: 110px; }
+    input { width: 145px; }
     button { cursor: pointer; }
     button.active { background: #2962ff; color: #fff; }
     button.danger { background: #b22833; color: #fff; }
@@ -24,36 +24,42 @@
     <div class="group">
       <h1>📈 全球看盤</h1>
       <select id="symbol-select">
-        <optgroup label="🌐 全球指數">
-          <option value="^TWII">台灣加權 (^TWII)</option>
-          <option value="^GSPC">標普500 (^GSPC)</option>
-          <option value="^IXIC">那斯達克 (^IXIC)</option>
-          <option value="^SOX">費半 (^SOX)</option>
-          <option value="^N225">日經225 (^N225)</option>
+        <optgroup id="fav-group" label="⭐ 我的雲端自選股"></optgroup>
+        <optgroup label="🇹🇼 台灣指數與熱門股">
+          <option value="^TWII">台灣加權指數 (^TWII)</option>
+          <option value="^TWOII">台灣櫃買指數 (^TWOII)</option>
+          <option value="2330.TW" selected>台積電 (2330)</option>
+          <option value="0050.TW">元大台灣50 (0050)</option>
+          <option value="00878.TW">國泰永續高股息 (00878)</option>
+          <option value="8069.TWO">元太-上櫃 (8069)</option>
         </optgroup>
-        <optgroup label="🇹🇼 台股/ETF">
-          <option value="2330.TW" selected>台積電 (2330.TW)</option>
-          <option value="2317.TW">鴻海 (2317.TW)</option>
-          <option value="2454.TW">聯發科 (2454.TW)</option>
-          <option value="0050.TW">元大台灣50 (0050.TW)</option>
-          <option value="00878.TW">國泰高股息 (00878.TW)</option>
-          <option value="8069.TWO">元太-上櫃 (8069.TWO)</option>
-        </optgroup>
-        <optgroup label="🇺🇸 美股/ETF">
+        <optgroup label="🇺🇸 美國指數與熱門股">
+          <option value="^GSPC">標普 500 (^GSPC)</option>
+          <option value="^IXIC">那斯達克綜合 (^IXIC)</option>
+          <option value="^DJI">道瓊工業 (^DJI)</option>
+          <option value="^SOX">費城半導體 (^SOX)</option>
+          <option value="^VIX">VIX 恐慌指數 (^VIX)</option>
           <option value="NVDA">NVIDIA (NVDA)</option>
-          <option value="AAPL">Apple (AAPL)</option>
-          <option value="TSLA">Tesla (TSLA)</option>
           <option value="SPY">SPY ETF</option>
           <option value="QQQ">QQQ ETF</option>
         </optgroup>
+        <optgroup label="🌏 亞歐全球主要指數">
+          <option value="^N225">日本日經 225 (^N225)</option>
+          <option value="^KS11">韓國 KOSPI (^KS11)</option>
+          <option value="^HSI">香港恆生指數 (^HSI)</option>
+          <option value="000001.SS">中國上證指數 (000001.SS)</option>
+          <option value="^GDAXI">德國 DAX (^GDAXI)</option>
+          <option value="^FTSE">英國富時 100 (^FTSE)</option>
+          <option value="^FCHI">法國 CAC 40 (^FCHI)</option>
+        </optgroup>
         <optgroup label="🪙 加密貨幣">
-          <option value="BTCUSDT">BTC/USDT</option>
-          <option value="ETHUSDT">ETH/USDT</option>
-          <option value="SOLUSDT">SOL/USDT</option>
+          <option value="BTCUSDT">BTC / USDT</option>
+          <option value="ETHUSDT">ETH / USDT</option>
         </optgroup>
       </select>
-      <input id="custom-symbol" type="text" placeholder="如 2603.TW" />
+      <input id="custom-symbol" type="text" placeholder="輸入台股數字/美股代號" />
       <button id="search-btn">查詢</button>
+      <button id="fav-btn" title="加入或移除雲端自選">⭐ 自選</button>
       <select id="interval-select"><option value="15m">15分K</option><option value="1h">1小時K</option><option value="1d" selected>日K</option></select>
       <span id="status-badge">⏳ 啟動中...</span>
     </div>
@@ -64,6 +70,6 @@
     </div>
   </header>
   <div id="chart-container"></div>
-  <script src="./app.js"></script>
+  <script src="./app.js?v=10"></script>
 </body>
 </html>
