@@ -4,11 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>專屬雲端看盤與畫線系統</title>
-  <script>
-  const s = document.createElement('script');
-  s.src = 'https://' + 'cdn.jsdelivr.net' + '/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js';
-  document.head.appendChild(s);
-  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -72,20 +67,27 @@
   <div id="chart-container"></div>
 
   <div class="status-bar">
-    <span id="status-text">系統初始化中...</span>
+    <span id="status-text">正在載入圖表引擎...</span>
     <span>儲存模式：本機暫存</span>
   </div>
 
   <script>
-    const chartContainer = document.getElementById('chart-container');
-    const symbolSelect = document.getElementById('symbol-select');
-    const drawBtn = document.getElementById('draw-hline-btn');
-    const clearBtn = document.getElementById('clear-lines-btn');
     const statusText = document.getElementById('status-text');
+    const chartScript = document.createElement('script');
+    chartScript.src = 'https://' + 'cdn.jsdelivr.net' + '/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js';
+    
+    chartScript.onload = () => initApp();
+    chartScript.onerror = () => {
+      statusText.textContent = '❌ 圖表引擎載入失敗，請檢查網路連線。';
+    };
+    document.head.appendChild(chartScript);
 
-    if (typeof LightweightCharts === 'undefined') {
-      statusText.textContent = '❌ 圖表引擎載入失敗（網路可能封鎖了外部 CDN 資源）';
-    } else {
+    function initApp() {
+      const chartContainer = document.getElementById('chart-container');
+      const symbolSelect = document.getElementById('symbol-select');
+      const drawBtn = document.getElementById('draw-hline-btn');
+      const clearBtn = document.getElementById('clear-lines-btn');
+
       let isDrawMode = false;
       let priceLines = [];
       let currentSymbol = symbolSelect.value;
@@ -142,7 +144,8 @@
       async function loadMarketData(symbol) {
         statusText.textContent = `正在載入 ${symbol} K 線資料...`;
         try {
-          const res = await fetch(`https://binance.com{symbol}&interval=1h&limit=200`);
+          const apiBase = 'https://' + '://binance.com';
+          const res = await fetch(`${apiBase}/api/v3/klines?symbol=${symbol}&interval=1h&limit=200`);
           const data = await res.json();
           const candles = data.map(item => ({
             time: Number(item.at(0)) / 1000,
