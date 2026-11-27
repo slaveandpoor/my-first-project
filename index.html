@@ -16,7 +16,9 @@
     button { cursor: pointer; }
     button.active { background: #2962ff; color: #fff; }
     button.danger { background: #b22833; color: #fff; }
-    #chart-container { flex: 1 1 auto; width: 100%; position: relative; }
+    #charts-wrapper { flex: 1 1 auto; display: flex; flex-direction: column; width: 100%; min-height: 0; }
+    #chart-container { flex: 3 1 0; width: 100%; position: relative; border-bottom: 2px solid #2a2e39; }
+    #volume-container { flex: 1 1 0; width: 100%; position: relative; }
   </style>
 </head>
 <body>
@@ -74,7 +76,10 @@
       <button id="clear-lines-btn" class="danger">🗑️ 清除雲端</button>
     </div>
   </header>
-  <div id="chart-container"></div>
-  <script src="./app.js?v=12"></script>
+  <div id="charts-wrapper">
+    <div id="chart-container"></div>
+    <div id="volume-container"></div>
+  </div>
+  <script src="./app.js?v=13"></script>
 </body>
 </html>
