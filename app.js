@@ -49,20 +49,27 @@ function initApp() {
     });
   }
 
-  async function queryYahoo(sym, intv) {
+  function parseYahoo(raw) {
+    const json = typeof raw === 'string' ? JSON.parse(raw) : (raw.contents ? JSON.parse(raw.contents) : raw);
+    const r = json.chart.result.at(0), q = r.indicators.quote.at(0);
+    const list = r.timestamp.map((t, i) => ({ time: t, open: q.open.at(i), high: q.high.at(i), low: q.low.at(i), close: q.close.at(i) })).filter(c => c.open !== null && c.close !== null);
+    if (!list.length) throw new Error('empty');
+    return list;
+  }
+
+  async function queryYahooFast(sym, intv) {
     const range = intv === '1d' ? '1y' : (intv === '1h' ? '1mo' : '5d');
-    const yUrl = 'https://' + 'query2.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${range}`;
-    const proxies = ['https://' + 'api.codetabs' + `.com/v1/proxy?quest=${encodeURIComponent(yUrl)}`, 'https://' + 'thingproxy.freeboard' + `.io/fetch/${yUrl}`, 'https://' + 'api.allorigins' + `.win/get?url=${encodeURIComponent(yUrl)}`];
-    for (const pUrl of proxies) {
-      try {
-        const res = await fetch(pUrl); if (!res.ok) continue;
-        let json = await res.json(); if (json.contents) json = JSON.parse(json.contents);
-        const r = json.chart.result.at(0), q = r.indicators.quote.at(0);
-        const list = r.timestamp.map((t, i) => ({ time: t, open: q.open.at(i), high: q.high.at(i), low: q.low.at(i), close: q.close.at(i) })).filter(c => c.open !== null && c.close !== null);
-        if (list.length > 0) return list;
-      } catch (e) {}
-    }
-    return null;
+    const y1 = 'https://' + 'query1.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${range}`;
+    const y2 = 'https://' + 'query2.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${range}`;
+    const urls = [
+      'https://' + 'api.codetabs' + `.com/v1/proxy?quest=${encodeURIComponent(y1)}`,
+      'https://' + 'api.allorigins' + `.win/raw?url=${encodeURIComponent(y2)}`,
+      'https://' + 'corsproxy' + `.io/?${encodeURIComponent(y1)}`,
+      'https://' + 'thingproxy.freeboard' + `.io/fetch/${y2}`
+    ];
+    try {
+      return await Promise.any(urls.map(u => fetch(u).then(r => { if (!r.ok) throw new Error(); return r.text(); }).then(parseYahoo)));
+    } catch (e) { return null; }
   }
 
   async function fetchCandles(rawSym, intv) {
@@ -72,7 +79,7 @@ function initApp() {
     }
     const candidates = /^[0-9]{4,6}[A-Z]?$/.test(rawSym) ? [`${rawSym}.TW`, `${rawSym}.TWO`] : [rawSym];
     for (const cSym of candidates) {
-      const data = await queryYahoo(cSym, intv);
+      const data = await queryYahooFast(cSym, intv);
       if (data) return { sym: cSym, data };
     }
     throw new Error(`查無 ${rawSym} 或連線逾時`);
