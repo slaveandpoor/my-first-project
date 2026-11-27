@@ -4,7 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>專屬雲端看盤與畫線系統</title>
-  <script src="https://jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script>
+  const s = document.createElement('script');
+  s.src = 'https://' + 'cdn.jsdelivr.net' + '/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js';
+  document.head.appendChild(s);
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
