@@ -23,16 +23,21 @@ function initApp() {
     messagingSenderId: "465125050422", appId: "1:465125050422:web:4c2b050ab549c675767097"
   });
   const db = firebase.firestore();
-  const chartContainer = document.getElementById('chart-container'), symbolSelect = document.getElementById('symbol-select'), favGroup = document.getElementById('fav-group');
+  const chartContainer = document.getElementById('chart-container'), volumeContainer = document.getElementById('volume-container');
+  const symbolSelect = document.getElementById('symbol-select'), favGroup = document.getElementById('fav-group');
   const intervalSelect = document.getElementById('interval-select'), customInput = document.getElementById('custom-symbol'), searchBtn = document.getElementById('search-btn');
   const favBtn = document.getElementById('fav-btn'), colorSelect = document.getElementById('color-select'), drawBtn = document.getElementById('draw-hline-btn'), clearBtn = document.getElementById('clear-lines-btn');
   let isDrawMode = false, priceLines = [], currentSymbol = symbolSelect.value, currentInterval = intervalSelect.value, unsub = null, liveTimer = null, favList = [];
 
-  const chart = LightweightCharts.createChart(chartContainer, { width: chartContainer.clientWidth || window.innerWidth, height: chartContainer.clientHeight || (window.innerHeight - 52), layout: { background: { color: '#131722' }, textColor: '#d1d4dc' }, grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } }, rightPriceScale: { borderColor: '#2a2e39' }, timeScale: { borderColor: '#2a2e39', timeVisible: true } });
+  const baseOpts = { layout: { background: { color: '#131722' }, textColor: '#d1d4dc' }, grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } }, rightPriceScale: { borderColor: '#2a2e39', minimumWidth: 75 } };
+  const chart = LightweightCharts.createChart(chartContainer, { ...baseOpts, width: chartContainer.clientWidth, height: chartContainer.clientHeight, timeScale: { visible: false } });
+  const volChart = LightweightCharts.createChart(volumeContainer, { ...baseOpts, width: volumeContainer.clientWidth, height: volumeContainer.clientHeight, timeScale: { borderColor: '#2a2e39', timeVisible: true } });
+
   const candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' });
-  candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.25 } });
-  const volumeSeries = chart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: '' });
-  volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
+  const volumeSeries = volChart.addHistogramSeries({ priceFormat: { type: 'volume' } });
+
+  chart.timeScale().subscribeVisibleLogicalRangeChange(r => { if (r) volChart.timeScale().setVisibleLogicalRange(r); });
+  volChart.timeScale().subscribeVisibleLogicalRangeChange(r => { if (r) chart.timeScale().setVisibleLogicalRange(r); });
 
   db.collection('user_settings').doc('watchlist').onSnapshot((doc) => {
     favList = doc.exists ? (doc.data().symbols || []) : [];
@@ -58,15 +63,9 @@ function initApp() {
 
   async function queryYahooFast(sym, intv) {
     const rangeMap = { '60m': '1mo', '1d': '2y', '1wk': '5y', '1mo': '10y' };
-    const range = rangeMap[intv] || '1y';
-    const y1 = 'https://' + 'query1.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${range}`;
-    const y2 = 'https://' + 'query2.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${range}`;
-    const urls = [
-      'https://' + 'api.codetabs' + `.com/v1/proxy?quest=${encodeURIComponent(y1)}`,
-      'https://' + 'api.allorigins' + `.win/raw?url=${encodeURIComponent(y2)}`,
-      'https://' + 'corsproxy' + `.io/?${encodeURIComponent(y1)}`,
-      'https://' + 'thingproxy.freeboard' + `.io/fetch/${y2}`
-    ];
+    const y1 = 'https://' + 'query1.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${rangeMap[intv] || '1y'}`;
+    const y2 = 'https://' + 'query2.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${rangeMap[intv] || '1y'}`;
+    const urls = ['https://' + 'api.codetabs' + `.com/v1/proxy?quest=${encodeURIComponent(y1)}`, 'https://' + 'api.allorigins' + `.win/raw?url=${encodeURIComponent(y2)}`, 'https://' + 'corsproxy' + `.io/?${encodeURIComponent(y1)}`, 'https://' + 'thingproxy.freeboard' + `.io/fetch/${y2}`];
     try { return await Promise.any(urls.map(u => fetch(u).then(r => { if (!r.ok) throw new Error(); return r.text(); }).then(parseYahoo))); }
     catch (e) { return null; }
   }
@@ -78,21 +77,17 @@ function initApp() {
       return { sym: rawSym, data: (await res.json()).map(d => ({ time: Number(d.at(0))/1000, open: Number(d.at(1)), high: Number(d.at(2)), low: Number(d.at(3)), close: Number(d.at(4)), volume: Number(d.at(5)) })) };
     }
     const candidates = /^[0-9]{4,6}[A-Z]?$/.test(rawSym) ? [`${rawSym}.TW`, `${rawSym}.TWO`] : [rawSym];
-    for (const cSym of candidates) {
-      const data = await queryYahooFast(cSym, intv);
-      if (data) return { sym: cSym, data };
-    }
+    for (const cSym of candidates) { const data = await queryYahooFast(cSym, intv); if (data) return { sym: cSym, data }; }
     throw new Error(`查無 ${rawSym} 或連線逾時`);
   }
 
   async function loadData(sym, intv, silent = false) {
     if (!silent) { statusBadge.style.color = '#ffeb3b'; statusBadge.textContent = `⏳ 搜尋 ${sym}...`; }
     try {
-      const res = await fetchCandles(sym, intv);
-      currentSymbol = res.sym;
+      const res = await fetchCandles(sym, intv); currentSymbol = res.sym;
       candleSeries.setData(res.data);
-      volumeSeries.setData(res.data.map(d => ({ time: d.time, value: d.volume, color: d.close >= d.open ? 'rgba(38,166,154,0.45)' : 'rgba(239,83,80,0.45)' })));
-      if (!silent) { chart.timeScale().fitContent(); subscribeCloud(currentSymbol); }
+      volumeSeries.setData(res.data.map(d => ({ time: d.time, value: d.volume, color: d.close >= d.open ? '#26a69a' : '#ef5350' })));
+      if (!silent) { chart.timeScale().fitContent(); volChart.timeScale().fitContent(); subscribeCloud(currentSymbol); }
     } catch (err) { if (!silent) { statusBadge.style.color = '#ef5350'; statusBadge.textContent = `❌ ${err.message}`; } }
   }
 
@@ -122,6 +117,6 @@ function initApp() {
   intervalSelect.onchange = e => { currentInterval = e.target.value; switchSymbol(currentSymbol); };
   searchBtn.onclick = () => switchSymbol(customInput.value);
   customInput.onkeydown = e => { if (e.key === 'Enter') switchSymbol(customInput.value); };
-  window.onresize = () => chart.applyOptions({ width: chartContainer.clientWidth, height: chartContainer.clientHeight });
+  window.onresize = () => { chart.applyOptions({ width: chartContainer.clientWidth, height: chartContainer.clientHeight }); volChart.applyOptions({ width: volumeContainer.clientWidth, height: volumeContainer.clientHeight }); };
   switchSymbol(currentSymbol);
 }
