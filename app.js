@@ -30,8 +30,8 @@ function initApp() {
   let isDrawMode = false, priceLines = [], currentSymbol = symbolSelect.value, currentInterval = intervalSelect.value, unsub = null, liveTimer = null, favList = [];
 
   const baseOpts = { layout: { background: { color: '#131722' }, textColor: '#d1d4dc' }, grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } }, rightPriceScale: { borderColor: '#2a2e39', minimumWidth: 75 } };
-  const chart = LightweightCharts.createChart(chartContainer, { ...baseOpts, width: chartContainer.clientWidth, height: chartContainer.clientHeight, timeScale: { visible: false } });
-  const volChart = LightweightCharts.createChart(volumeContainer, { ...baseOpts, width: volumeContainer.clientWidth, height: volumeContainer.clientHeight, timeScale: { borderColor: '#2a2e39', timeVisible: true } });
+  const chart = LightweightCharts.createChart(chartContainer, { ...baseOpts, width: chartContainer.clientWidth || window.innerWidth, height: chartContainer.clientHeight || Math.floor(window.innerHeight * 0.72), timeScale: { visible: false } });
+  const volChart = LightweightCharts.createChart(volumeContainer, { ...baseOpts, width: volumeContainer.clientWidth || window.innerWidth, height: volumeContainer.clientHeight || Math.floor(window.innerHeight * 0.18), timeScale: { borderColor: '#2a2e39', timeVisible: true } });
 
   const candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' });
   const volumeSeries = volChart.addHistogramSeries({ priceFormat: { type: 'volume' } });
@@ -63,11 +63,13 @@ function initApp() {
 
   async function queryYahooFast(sym, intv) {
     const rangeMap = { '60m': '1mo', '1d': '2y', '1wk': '5y', '1mo': '10y' };
-    const y1 = 'https://' + 'query1.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${rangeMap[intv] || '1y'}`;
-    const y2 = 'https://' + 'query2.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${rangeMap[intv] || '1y'}`;
-    const urls = ['https://' + 'api.codetabs' + `.com/v1/proxy?quest=${encodeURIComponent(y1)}`, 'https://' + 'api.allorigins' + `.win/raw?url=${encodeURIComponent(y2)}`, 'https://' + 'corsproxy' + `.io/?${encodeURIComponent(y1)}`, 'https://' + 'thingproxy.freeboard' + `.io/fetch/${y2}`];
-    try { return await Promise.any(urls.map(u => fetch(u).then(r => { if (!r.ok) throw new Error(); return r.text(); }).then(parseYahoo))); }
-    catch (e) { return null; }
+    const yUrl = 'https://' + 'query1.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${rangeMap[intv] || '1y'}`;
+    const myWorker = 'https://' + 'yahoo-proxy.slaveandpoor' + `.workers.dev/?url=${encodeURIComponent(yUrl)}`;
+    try {
+      const res = await fetch(myWorker);
+      if (res.ok) return parseYahoo(await res.text());
+    } catch (e) {}
+    return null;
   }
 
   async function fetchCandles(rawSym, intv) {
