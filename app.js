@@ -27,12 +27,18 @@ function initApp() {
     appId: "1:465125050422:web:4c2b050ab549c675767097"
   });
   const db = firebase.firestore();
-  const chartContainer = document.getElementById('chart-container'), symbolSelect = document.getElementById('symbol-select'), intervalSelect = document.getElementById('interval-select');
-  const customInput = document.getElementById('custom-symbol'), searchBtn = document.getElementById('search-btn'), colorSelect = document.getElementById('color-select'), drawBtn = document.getElementById('draw-hline-btn'), clearBtn = document.getElementById('clear-lines-btn');
-  let isDrawMode = false, priceLines = [], currentSymbol = symbolSelect.value, currentInterval = intervalSelect.value, unsub = null, liveTimer = null;
+  const chartContainer = document.getElementById('chart-container'), symbolSelect = document.getElementById('symbol-select'), favGroup = document.getElementById('fav-group');
+  const intervalSelect = document.getElementById('interval-select'), customInput = document.getElementById('custom-symbol'), searchBtn = document.getElementById('search-btn');
+  const favBtn = document.getElementById('fav-btn'), colorSelect = document.getElementById('color-select'), drawBtn = document.getElementById('draw-hline-btn'), clearBtn = document.getElementById('clear-lines-btn');
+  let isDrawMode = false, priceLines = [], currentSymbol = symbolSelect.value, currentInterval = intervalSelect.value, unsub = null, liveTimer = null, favList = [];
 
   const chart = LightweightCharts.createChart(chartContainer, { width: chartContainer.clientWidth || window.innerWidth, height: chartContainer.clientHeight || (window.innerHeight - 52), layout: { background: { color: '#131722' }, textColor: '#d1d4dc' }, grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } }, rightPriceScale: { borderColor: '#2a2e39' }, timeScale: { borderColor: '#2a2e39', timeVisible: true } });
   const candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' });
+
+  db.collection('user_settings').doc('watchlist').onSnapshot((doc) => {
+    favList = doc.exists ? (doc.data().symbols || []) : [];
+    favGroup.innerHTML = favList.map(s => `<option value="${s}">⭐ ${s}</option>`).join('');
+  });
 
   function subscribeCloud(sym) {
     if (unsub) unsub();
@@ -43,43 +49,57 @@ function initApp() {
     });
   }
 
-  async function fetchCandles(sym, intv) {
-    if (sym.endsWith('USDT')) {
-      const res = await fetch('https://' + 'api.binance' + `.com/api/v3/klines?symbol=${sym}&interval=${intv}&limit=200`);
-      return (await res.json()).map(d => ({ time: Number(d.at(0))/1000, open: Number(d.at(1)), high: Number(d.at(2)), low: Number(d.at(3)), close: Number(d.at(4)) }));
-    }
+  async function queryYahoo(sym, intv) {
     const range = intv === '1d' ? '1y' : (intv === '1h' ? '1mo' : '5d');
     const yUrl = 'https://' + 'query2.finance.yahoo' + `.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${intv}&range=${range}`;
-    const proxies = [
-      'https://' + 'api.codetabs' + `.com/v1/proxy?quest=${encodeURIComponent(yUrl)}`,
-      'https://' + 'thingproxy.freeboard' + `.io/fetch/${yUrl}`,
-      'https://' + 'api.allorigins' + `.win/get?url=${encodeURIComponent(yUrl)}`
-    ];
+    const proxies = ['https://' + 'api.codetabs' + `.com/v1/proxy?quest=${encodeURIComponent(yUrl)}`, 'https://' + 'thingproxy.freeboard' + `.io/fetch/${yUrl}`, 'https://' + 'api.allorigins' + `.win/get?url=${encodeURIComponent(yUrl)}`];
     for (const pUrl of proxies) {
       try {
         const res = await fetch(pUrl); if (!res.ok) continue;
-        let json = await res.json();
-        if (json.contents) json = JSON.parse(json.contents);
+        let json = await res.json(); if (json.contents) json = JSON.parse(json.contents);
         const r = json.chart.result.at(0), q = r.indicators.quote.at(0);
-        return r.timestamp.map((t, i) => ({ time: t, open: q.open.at(i), high: q.high.at(i), low: q.low.at(i), close: q.close.at(i) })).filter(c => c.open !== null && c.close !== null);
+        const list = r.timestamp.map((t, i) => ({ time: t, open: q.open.at(i), high: q.high.at(i), low: q.low.at(i), close: q.close.at(i) })).filter(c => c.open !== null && c.close !== null);
+        if (list.length > 0) return list;
       } catch (e) {}
     }
-    throw new Error('Proxy 連線逾時，請稍後重試');
+    return null;
+  }
+
+  async function fetchCandles(rawSym, intv) {
+    if (rawSym.endsWith('USDT')) {
+      const res = await fetch('https://' + 'api.binance' + `.com/api/v3/klines?symbol=${rawSym}&interval=${intv}&limit=200`);
+      return { sym: rawSym, data: (await res.json()).map(d => ({ time: Number(d.at(0))/1000, open: Number(d.at(1)), high: Number(d.at(2)), low: Number(d.at(3)), close: Number(d.at(4)) })) };
+    }
+    const candidates = /^[0-9]{4,6}[A-Z]?$/.test(rawSym) ? [`${rawSym}.TW`, `${rawSym}.TWO`] : [rawSym];
+    for (const cSym of candidates) {
+      const data = await queryYahoo(cSym, intv);
+      if (data) return { sym: cSym, data };
+    }
+    throw new Error(`查無 ${rawSym} 或連線逾時`);
   }
 
   async function loadData(sym, intv, silent = false) {
-    if (!silent) { statusBadge.style.color = '#ffeb3b'; statusBadge.textContent = `⏳ 讀取 ${sym}...`; }
-    try { candleSeries.setData(await fetchCandles(sym, intv)); if (!silent) { chart.timeScale().fitContent(); subscribeCloud(sym); } }
-    catch (err) { if (!silent) { statusBadge.style.color = '#ef5350'; statusBadge.textContent = `❌ ${err.message}`; } }
+    if (!silent) { statusBadge.style.color = '#ffeb3b'; statusBadge.textContent = `⏳ 搜尋 ${sym}...`; }
+    try {
+      const res = await fetchCandles(sym, intv);
+      currentSymbol = res.sym;
+      candleSeries.setData(res.data);
+      if (!silent) { chart.timeScale().fitContent(); subscribeCloud(currentSymbol); }
+    } catch (err) { if (!silent) { statusBadge.style.color = '#ef5350'; statusBadge.textContent = `❌ ${err.message}`; } }
   }
 
   function switchSymbol(s) {
-    currentSymbol = s.trim().toUpperCase(); if (!currentSymbol) return;
+    const clean = s.trim().toUpperCase(); if (!clean) return;
     if (liveTimer) clearInterval(liveTimer);
-    loadData(currentSymbol, currentInterval, false);
+    loadData(clean, currentInterval, false);
     liveTimer = setInterval(() => loadData(currentSymbol, currentInterval, true), 10000);
   }
 
+  favBtn.onclick = async () => {
+    const exists = favList.includes(currentSymbol);
+    await db.collection('user_settings').doc('watchlist').set({ symbols: exists ? firebase.firestore.FieldValue.arrayRemove(currentSymbol) : firebase.firestore.FieldValue.arrayUnion(currentSymbol) }, { merge: true });
+    statusBadge.textContent = exists ? `已移除自選 ${currentSymbol}` : `⭐ 已加入雲端自選 ${currentSymbol}`;
+  };
   drawBtn.onclick = () => { isDrawMode = !isDrawMode; drawBtn.classList.toggle('active', isDrawMode); statusBadge.textContent = isDrawMode ? '🟢 請點圖表價位' : `☁️ ${currentSymbol} | ${priceLines.length}線`; };
   clearBtn.onclick = () => db.collection('chart_drawings').doc(encodeURIComponent(currentSymbol)).set({ lines: [] });
   chart.subscribeClick(async (p) => {
