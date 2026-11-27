@@ -6,18 +6,18 @@
   <title>全球全市場雲端看盤系統</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #131722; color: #d1d4dc; font-family: sans-serif; display: flex; flex-direction: column; }
-    header { flex: 0 0 auto; min-height: 50px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 6px 14px; background: #1e222d; border-bottom: 1px solid #2a2e39; gap: 6px; }
+    html, body { width: 100vw; height: 100vh; overflow: hidden; background: #131722; color: #d1d4dc; font-family: sans-serif; display: flex; flex-direction: column; }
+    header { flex: 0 0 auto; min-height: 48px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 6px 12px; background: #1e222d; border-bottom: 1px solid #2a2e39; gap: 6px; }
     .group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     h1 { font-size: 15px; color: #fff; }
     #status-badge { font-size: 12px; padding: 4px 10px; border-radius: 4px; background: #2a2e39; color: #4caf50; }
-    select, input, button { background: #2a2e39; color: #d1d4dc; border: 1px solid #363a45; padding: 5px 8px; border-radius: 4px; font-size: 13px; }
-    input { width: 145px; }
+    select, input, button { background: #2a2e39; color: #d1d4dc; border: 1px solid #363a45; padding: 4px 8px; border-radius: 4px; font-size: 13px; }
+    input { width: 140px; }
     button { cursor: pointer; }
     button.active { background: #2962ff; color: #fff; }
     button.danger { background: #b22833; color: #fff; }
     #charts-wrapper { flex: 1 1 auto; display: flex; flex-direction: column; width: 100%; min-height: 0; overflow: hidden; }
-    #chart-container { flex: 4 1 0; width: 100%; min-height: 0; position: relative; border-bottom: 2px solid #2a2e39; }
+    #chart-container { flex: 4 1 0; width: 100%; min-height: 0; position: relative; border-bottom: 2px solid #363a45; }
     #volume-container { flex: 1 1 0; width: 100%; min-height: 0; position: relative; }
   </style>
 </head>
@@ -29,7 +29,7 @@
         <optgroup id="fav-group" label="⭐ 我的雲端自選股"></optgroup>
         <optgroup label="🇹🇼 台灣指數與熱門股">
           <option value="^TWII">台灣加權指數 (^TWII)</option>
-          <option value="^TWOII">台灣櫃買指數 (^TWOII)</option>
+          <option value="^TWO">台灣櫃買指數 (^TWO)</option>
           <option value="2330.TW" selected>台積電 (2330)</option>
           <option value="0050.TW">元大台灣50 (0050)</option>
           <option value="00878.TW">國泰永續高股息 (00878)</option>
@@ -80,6 +80,6 @@
     <div id="chart-container"></div>
     <div id="volume-container"></div>
   </div>
-  <script src="./app.js?v=15"></script>
+  <script src="./app.js?v=16"></script>
 </body>
 </html>
