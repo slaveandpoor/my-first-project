@@ -3,19 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>專屬雲端看盤與畫線同步系統</title>
+  <title>專屬雲端看盤系統</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #131722; color: #d1d4dc; font-family: sans-serif; }
-    body { display: flex; flex-direction: column; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #131722; color: #d1d4dc; font-family: sans-serif; display: flex; flex-direction: column; }
     header { flex: 0 0 auto; min-height: 52px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 8px 14px; background: #1e222d; border-bottom: 1px solid #2a2e39; gap: 8px; }
     .group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     h1 { font-size: 15px; color: #fff; }
     #status-badge { font-size: 12px; padding: 4px 10px; border-radius: 4px; background: #2a2e39; color: #4caf50; }
     select, button { background: #2a2e39; color: #d1d4dc; border: 1px solid #363a45; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; }
-    button:hover { background: #363a45; }
-    button.active { background: #2962ff; color: #fff; border-color: #2962ff; }
-    button.danger { background: #b22833; color: #fff; border-color: #b22833; }
+    button.active { background: #2962ff; color: #fff; }
+    button.danger { background: #b22833; color: #fff; }
     #chart-container { flex: 1 1 auto; width: 100%; position: relative; }
   </style>
 </head>
@@ -23,73 +21,37 @@
   <header>
     <div class="group">
       <h1>📈 雲端看盤</h1>
-      <select id="symbol-select">
-        <option value="BTCUSDT">BTC / USDT</option>
-        <option value="ETHUSDT">ETH / USDT</option>
-        <option value="SOLUSDT">SOL / USDT</option>
-      </select>
-      <select id="interval-select">
-        <option value="15m">15分K</option>
-        <option value="1h" selected>1小時K</option>
-        <option value="4h">4小時K</option>
-        <option value="1d">日K</option>
-      </select>
+      <select id="symbol-select"><option value="BTCUSDT">BTC/USDT</option><option value="ETHUSDT">ETH/USDT</option><option value="SOLUSDT">SOL/USDT</option></select>
+      <select id="interval-select"><option value="15m">15分K</option><option value="1h" selected>1小時K</option><option value="4h">4小時K</option><option value="1d">日K</option></select>
       <span id="status-badge">⏳ 啟動中...</span>
     </div>
     <div class="group">
-      <select id="color-select">
-        <option value="#2962ff">🔵 藍色線</option>
-        <option value="#26a69a">🟢 綠色支撐</option>
-        <option value="#ef5350">🔴 紅色壓力</option>
-        <option value="#ffeb3b">🟡 黃色警戒</option>
-      </select>
+      <select id="color-select"><option value="#2962ff">🔵 藍線</option><option value="#26a69a">🟢 綠線</option><option value="#ef5350">🔴 紅線</option><option value="#ffeb3b">🟡 黃線</option></select>
       <button id="draw-hline-btn">➕ 畫水平線</button>
-      <button id="clear-lines-btn" class="danger">🗑️ 清除雲端線條</button>
+      <button id="clear-lines-btn" class="danger">🗑️ 清除雲端</button>
     </div>
   </header>
   <div id="chart-container"></div>
   <script>
     const statusBadge = document.getElementById('status-badge');
-    function loadScriptAny(urls, label) {
-      return new Promise(async (resolve, reject) => {
-        for (const src of urls) {
-          try {
-            await new Promise((res, rej) => {
-              const s = document.createElement('script');
-              s.src = src; s.onload = res; s.onerror = rej;
-              document.head.appendChild(s);
-            });
-            return resolve();
-          } catch (e) {}
-        }
-        reject(new Error(`${label} 載入失敗`));
-      });
-    }
-    async function bootstrap() {
+    const loadScript = (urls, label) => new Promise(async (resolve, reject) => {
+      for (const src of urls) {
+        try { await new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); return resolve(); } catch (e) {}
+      }
+      reject(new Error(`${label} 載入失敗`));
+    });
+    (async () => {
       try {
         statusBadge.style.color = '#ffeb3b';
-        statusBadge.textContent = '⏳ 1/3 載入圖表引擎...';
-        await loadScriptAny([
-          'https://' + 'cdn.jsdelivr.net' + '/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js',
-          'https://' + 'unpkg.com' + '/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js'
-        ], '圖表引擎');
-        statusBadge.textContent = '⏳ 2/3 載入 Firebase 核心...';
-        await loadScriptAny([
-          'https://' + '://gstatic.com' + '/firebasejs/10.12.2/firebase-app-compat.js',
-          'https://' + 'cdn.jsdelivr.net' + '/npm/firebase@10.12.2/firebase-app-compat.js'
-        ], 'Firebase App');
-        statusBadge.textContent = '⏳ 3/3 載入 Firestore 雲端...';
-        await loadScriptAny([
-          'https://' + '://gstatic.com' + '/firebasejs/10.12.2/firebase-firestore-compat.js',
-          'https://' + 'cdn.jsdelivr.net' + '/npm/firebase@10.12.2/firebase-firestore-compat.js'
-        ], 'Firestore');
+        statusBadge.textContent = '⏳ 1/3 載入圖表...';
+        await loadScript(['https://' + 'cdn.jsdelivr.net' + '/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js'], '圖表引擎');
+        statusBadge.textContent = '⏳ 2/3 載入 Firebase...';
+        await loadScript(['https://' + '://gstatic.com' + '/firebasejs/10.12.2/firebase-app-compat.js', 'https://' + 'cdn.jsdelivr.net' + '/npm/firebase@10.12.2/firebase-app-compat.js'], 'Firebase App');
+        statusBadge.textContent = '⏳ 3/3 載入 Firestore...';
+        await loadScript(['https://' + '://gstatic.com' + '/firebasejs/10.12.2/firebase-firestore-compat.js', 'https://' + 'cdn.jsdelivr.net' + '/npm/firebase@10.12.2/firebase-firestore-compat.js'], 'Firestore');
         initApp();
-      } catch (err) {
-        statusBadge.style.color = '#ef5350';
-        statusBadge.textContent = `❌ ${err.message}`;
-      }
-    }
-    bootstrap();
+      } catch (err) { statusBadge.style.color = '#ef5350'; statusBadge.textContent = `❌ ${err.message}`; }
+    })();
 
     function initApp() {
       firebase.initializeApp({
@@ -102,102 +64,57 @@
       });
       const db = firebase.firestore();
       const chartContainer = document.getElementById('chart-container');
-      const symbolSelect = document.getElementById('symbol-select');
-      const intervalSelect = document.getElementById('interval-select');
-      const colorSelect = document.getElementById('color-select');
-      const drawBtn = document.getElementById('draw-hline-btn');
-      const clearBtn = document.getElementById('clear-lines-btn');
-      let isDrawMode = false, priceLines = [], currentSymbol = symbolSelect.value, currentInterval = intervalSelect.value, unsubscribeCloud = null;
+      const symbolSelect = document.getElementById('symbol-select'), intervalSelect = document.getElementById('interval-select'), colorSelect = document.getElementById('color-select');
+      const drawBtn = document.getElementById('draw-hline-btn'), clearBtn = document.getElementById('clear-lines-btn');
+      let isDrawMode = false, priceLines = [], currentSymbol = symbolSelect.value, currentInterval = intervalSelect.value, unsub = null;
 
       const chart = LightweightCharts.createChart(chartContainer, {
-        width: chartContainer.clientWidth || window.innerWidth,
-        height: chartContainer.clientHeight || (window.innerHeight - 52),
+        width: chartContainer.clientWidth || window.innerWidth, height: chartContainer.clientHeight || (window.innerHeight - 52),
         layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
         grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
-        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-        rightPriceScale: { borderColor: '#2a2e39' },
-        timeScale: { borderColor: '#2a2e39', timeVisible: true },
+        rightPriceScale: { borderColor: '#2a2e39' }, timeScale: { borderColor: '#2a2e39', timeVisible: true }
       });
-      const candleSeries = chart.addCandlestickSeries({
-        upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350',
-      });
+      const candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' });
 
-      function renderCloudLines(linesData) {
-        priceLines.forEach(line => candleSeries.removePriceLine(line));
-        priceLines = [];
-        linesData.forEach(item => {
-          priceLines.push(candleSeries.createPriceLine({
-            price: item.price, color: item.color || '#2962ff', lineWidth: 2,
-            lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible: true, title: item.label || '雲端標記',
-          }));
-        });
+      function subscribeCloud(sym) {
+        if (unsub) unsub();
+        unsub = db.collection('chart_drawings').doc(sym).onSnapshot((doc) => {
+          priceLines.forEach(l => candleSeries.removePriceLine(l)); priceLines = [];
+          (doc.exists ? (doc.data().lines || []) : []).forEach(item => {
+            priceLines.push(candleSeries.createPriceLine({ price: item.price, color: item.color || '#2962ff', lineWidth: 2, axisLabelVisible: true, title: '雲端標記' }));
+          });
+          statusBadge.style.color = '#4caf50'; statusBadge.textContent = `☁️ 雲端同步 | ${sym} (${priceLines.length}線)`;
+        }, (err) => { statusBadge.style.color = '#ef5350'; statusBadge.textContent = `❌ 權限錯誤: ${err.code}`; });
       }
 
-      function subscribeToCloudLines(symbol) {
-        if (unsubscribeCloud) unsubscribeCloud();
-        unsubscribeCloud = db.collection('chart_drawings').doc(symbol).onSnapshot((doc) => {
-          renderCloudLines(doc.exists ? (doc.data().lines || []) : []);
-          statusBadge.style.color = '#4caf50';
-          statusBadge.textContent = `☁️ 雲端已同步 | ${symbol} (${priceLines.length} 條線)`;
-        }, (err) => {
-          statusBadge.style.color = '#ef5350';
-          statusBadge.textContent = `❌ 雲端權限錯誤：${err.code}`;
-        });
-      }
-
-      async function loadMarketData(symbol, interval) {
-        statusBadge.style.color = '#ffeb3b';
-        statusBadge.textContent = `⏳ 讀取 ${symbol} (${interval})...`;
-        const endpoints = [
-          'https://' + '://binance.com' + `/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=200`,
-          'https://' + 'data-api.binance.vision' + `/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=200`
-        ];
-        for (const url of endpoints) {
+      async function loadData(sym, intv) {
+        statusBadge.style.color = '#ffeb3b'; statusBadge.textContent = `⏳ 讀取 ${sym}...`;
+        for (const host of ['://binance.com', 'data-api.binance.vision']) {
           try {
-            const res = await fetch(url);
+            const res = await fetch('https://' + host + `/api/v3/klines?symbol=${sym}&interval=${intv}&limit=200`);
             if (!res.ok) continue;
             const data = await res.json();
-            candleSeries.setData(data.map(item => ({
-              time: Number(item.at(0)) / 1000, open: Number(item.at(1)), high: Number(item.at(2)), low: Number(item.at(3)), close: Number(item.at(4)),
-            })));
-            chart.timeScale().fitContent();
-            subscribeToCloudLines(symbol);
-            return;
+            candleSeries.setData(data.map(d => ({ time: Number(d.at(0))/1000, open: Number(d.at(1)), high: Number(d.at(2)), low: Number(d.at(3)), close: Number(d.at(4)) })));
+            chart.timeScale().fitContent(); subscribeCloud(sym); return;
           } catch (e) {}
         }
-        statusBadge.style.color = '#ef5350';
-        statusBadge.textContent = '❌ 行情 API 無法連線';
+        statusBadge.style.color = '#ef5350'; statusBadge.textContent = '❌ 行情連線失敗';
       }
 
-      drawBtn.addEventListener('click', () => {
-        isDrawMode = !isDrawMode;
-        drawBtn.classList.toggle('active', isDrawMode);
-        statusBadge.style.color = isDrawMode ? '#2962ff' : '#4caf50';
-        statusBadge.textContent = isDrawMode ? '🟢 請點擊圖表欲標記的價格' : `☁️ 雲端已同步 | ${currentSymbol} (${priceLines.length} 條線)`;
-      });
-
-      clearBtn.addEventListener('click', async () => {
-        await db.collection('chart_drawings').doc(currentSymbol).set({ lines: [] });
-      });
-
-      chart.subscribeClick(async (param) => {
-        if (!isDrawMode || !param.point) return;
-        const price = candleSeries.coordinateToPrice(param.point.y);
+      drawBtn.onclick = () => { isDrawMode = !isDrawMode; drawBtn.classList.toggle('active', isDrawMode); statusBadge.textContent = isDrawMode ? '🟢 請點圖表價位' : `☁️ 雲端同步 | ${currentSymbol} (${priceLines.length}線)`; };
+      clearBtn.onclick = () => db.collection('chart_drawings').doc(currentSymbol).set({ lines: [] });
+      chart.subscribeClick(async (p) => {
+        if (!isDrawMode || !p.point) return;
+        const price = candleSeries.coordinateToPrice(p.point.y);
         if (price !== null) {
-          isDrawMode = false;
-          drawBtn.classList.remove('active');
-          statusBadge.textContent = '⏳ 正在寫入雲端...';
-          await db.collection('chart_drawings').doc(currentSymbol).set({
-            lines: firebase.firestore.FieldValue.arrayUnion({ price: Number(price.toFixed(2)), color: colorSelect.value, label: '支撐/壓力', createdAt: Date.now() }),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
+          isDrawMode = false; drawBtn.classList.remove('active'); statusBadge.textContent = '⏳ 寫入雲端...';
+          await db.collection('chart_drawings').doc(currentSymbol).set({ lines: firebase.firestore.FieldValue.arrayUnion({ price: Number(price.toFixed(2)), color: colorSelect.value }) }, { merge: true });
         }
       });
-
-      symbolSelect.addEventListener('change', (e) => { currentSymbol = e.target.value; loadMarketData(currentSymbol, currentInterval); });
-      intervalSelect.addEventListener('change', (e) => { currentInterval = e.target.value; loadMarketData(currentSymbol, currentInterval); });
-      window.addEventListener('resize', () => chart.applyOptions({ width: chartContainer.clientWidth, height: chartContainer.clientHeight }));
-      loadMarketData(currentSymbol, currentInterval);
+      symbolSelect.onchange = e => { currentSymbol = e.target.value; loadData(currentSymbol, currentInterval); };
+      intervalSelect.onchange = e => { currentInterval = e.target.value; loadData(currentSymbol, currentInterval); };
+      window.onresize = () => chart.applyOptions({ width: chartContainer.clientWidth, height: chartContainer.clientHeight });
+      loadData(currentSymbol, currentInterval);
     }
   </script>
 </body>
