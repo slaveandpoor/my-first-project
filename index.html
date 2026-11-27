@@ -60,7 +60,12 @@
       <input id="custom-symbol" type="text" placeholder="輸入台股數字/美股代號" />
       <button id="search-btn">查詢</button>
       <button id="fav-btn" title="加入或移除雲端自選">⭐ 自選</button>
-      <select id="interval-select"><option value="15m">15分K</option><option value="1h">1小時K</option><option value="1d" selected>日K</option></select>
+      <select id="interval-select">
+        <option value="60m">1小時K</option>
+        <option value="1d" selected>日線K</option>
+        <option value="1wk">週線K</option>
+        <option value="1mo">月線K</option>
+      </select>
       <span id="status-badge">⏳ 啟動中...</span>
     </div>
     <div class="group">
@@ -70,6 +75,6 @@
     </div>
   </header>
   <div id="chart-container"></div>
-  <script src="./app.js?v=10"></script>
+  <script src="./app.js?v=12"></script>
 </body>
 </html>
