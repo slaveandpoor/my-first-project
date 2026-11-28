@@ -2,49 +2,71 @@ window.MarketAPI = {
   worker: 'https://' + 'yahoo-proxy.slaveandpoor' + '.workers.dev/?url=',
   nameCache: {},
 
-  async fetchChineseName(sym, selectEl, favMap) {
-    if (this.nameCache[sym]) return this.nameCache[sym];
+  async lookupSymbolName(rawSym, selectEl, favMap) {
+    const cleanRaw = String(rawSym || '').trim().toUpperCase();
+    if (!cleanRaw) return '';
 
-    const opt = [...selectEl.options].find(o => o.value === sym);
-    if (opt) {
-      const name = opt.textContent.replace(/^⭐\s*/, '').split(' (')[0].trim();
-      this.nameCache[sym] = name;
-      return name;
+    const candidates = /^[0-9]{4,6}[A-Z]?$/.test(cleanRaw)
+      ? [`${cleanRaw}.TW`, `${cleanRaw}.TWO`]
+      : [cleanRaw];
+
+    for (const sym of candidates) {
+      if (this.nameCache[sym]) {
+        return this.nameCache[sym];
+      }
+      if (selectEl) {
+        const opt = [...selectEl.options].find(o => o.value === sym);
+        if (opt) {
+          const name = opt.textContent.replace(/^⭐\s*/, '').split(' (')[0].trim();
+          this.nameCache[sym] = name;
+          return name;
+        }
+      }
+      if (favMap && favMap[sym] && favMap[sym] !== sym) {
+        this.nameCache[sym] = favMap[sym];
+        return favMap[sym];
+      }
     }
 
-    if (favMap && favMap[sym] && /[\u4e00-\u9fa5]/.test(favMap[sym])) {
-      this.nameCache[sym] = favMap[sym];
-      return favMap[sym];
-    }
-
-    if (sym.endsWith('.TW') || sym.endsWith('.TWO')) {
-      try {
-        const twUrl = `https://tw.stock.yahoo.com/quote/${encodeURIComponent(sym)}`;
-        const res = await fetch(this.worker + encodeURIComponent(twUrl));
-        if (res.ok) {
-          const html = await res.text();
-          const titleMatch = html.match(/<title[^>]*>([^<(（]+)/i);
-          if (titleMatch && titleMatch[1]) {
-            const cleaned = titleMatch[1].trim();
-            if (cleaned && cleaned !== 'Yahoo奇摩股市' && /[\u4e00-\u9fa5]/.test(cleaned)) {
-              this.nameCache[sym] = cleaned;
-              return cleaned;
+    for (const sym of candidates) {
+      if (sym.endsWith('.TW') || sym.endsWith('.TWO')) {
+        try {
+          const twUrl = `https://tw.stock.yahoo.com/quote/${encodeURIComponent(sym)}`;
+          const res = await fetch(this.worker + encodeURIComponent(twUrl));
+          if (res.ok) {
+            const html = await res.text();
+            const titleMatch = html.match(/<title[^>]*>([^<(（]+)/i);
+            if (titleMatch && titleMatch[1]) {
+              const cleaned = titleMatch[1].trim();
+              if (cleaned && cleaned !== 'Yahoo奇摩股市') {
+                this.nameCache[sym] = cleaned;
+                return cleaned;
+              }
             }
           }
+        } catch (e) {}
+      }
+    }
+
+    for (const sym of candidates) {
+      try {
+        const sUrl = 'https://' + 'query1.finance.yahoo' + `.com/v1/finance/search?q=${encodeURIComponent(sym)}&lang=zh-Hant-TW®ion=TW"esCount=1`;
+        const res = await fetch(this.worker + encodeURIComponent(sUrl));
+        const q = (await res.json()).quotes?.at(0);
+        const foundName = q?.shortname || q?.longname;
+        if (foundName) {
+          this.nameCache[sym] = foundName;
+          return foundName;
         }
       } catch (e) {}
     }
 
-    try {
-      const sUrl = 'https://' + 'query1.finance.yahoo' + `.com/v1/finance/search?q=${encodeURIComponent(sym)}&lang=zh-Hant-TW®ion=TW"esCount=1`;
-      const res = await fetch(this.worker + encodeURIComponent(sUrl));
-      const q = (await res.json()).quotes?.at(0);
-      const fallbackName = q?.shortname || q?.longname || sym;
-      this.nameCache[sym] = fallbackName;
-      return fallbackName;
-    } catch (e) {
-      return sym;
-    }
+    return '';
+  },
+
+  async fetchChineseName(sym, selectEl, favMap) {
+    const found = await this.lookupSymbolName(sym, selectEl, favMap);
+    return found || sym;
   },
 
   parseYahoo(raw) {
