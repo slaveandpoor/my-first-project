@@ -92,31 +92,34 @@
     .item-del-btn { background: #8e2430; color: #fff; border: none; padding: 2px 7px; border-radius: 3px; font-size: 11px; }
     .item-del-btn:hover { background: #ef5350; }
 
-    /* 自選名單分類、排序、命名管理視窗（穩定垂直滾輪） */
+    /* 自選名單分類、排序、命名管理視窗（含穩定上下滾輪） */
     #watchlist-modal-backdrop {
       display: none;
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.65);
-      z-index: 60;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      padding: 16px;
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+      padding: 14px;
+      pointer-events: auto;
     }
-    #watchlist-modal-backdrop.open { display: block; }
+    #watchlist-modal-backdrop.open { display: flex; }
     #watchlist-modal {
       width: 680px;
       max-width: 100%;
-      height: calc(100dvh - 32px);
-      max-height: calc(100dvh - 32px);
-      margin: 0 auto;
+      height: 86dvh;
+      max-height: 86dvh;
       background: #1e222d;
       border: 1px solid #363a45;
       border-radius: 8px;
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.72);
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      pointer-events: auto;
     }
     .wl-header, .wl-toolbar {
       flex: 0 0 auto;
@@ -131,6 +134,9 @@
       font-size: 14px;
       font-weight: bold;
       color: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 2;
     }
     .wl-toolbar {
       display: flex;
@@ -143,36 +149,18 @@
     }
     .wl-toolbar input { background: #131722; }
     .wl-body {
-      flex: 1 1 0;
-      min-height: 0;
-      overflow-y: scroll !important;
-      -webkit-overflow-scrolling: touch;
-      overscroll-behavior: contain;
+      flex: 1 0 auto;
+      overflow: visible;
       padding: 12px 14px 28px;
       display: flex;
       flex-direction: column;
       gap: 12px;
-      scrollbar-width: thin;
-      scrollbar-color: #5d606b #181c27;
-    }
-    .wl-body::-webkit-scrollbar {
-      width: 8px;
-    }
-    .wl-body::-webkit-scrollbar-track {
-      background: #181c27;
-    }
-    .wl-body::-webkit-scrollbar-thumb {
-      background: #5d606b;
-      border-radius: 4px;
-    }
-    .wl-body::-webkit-scrollbar-thumb:hover {
-      background: #787b86;
     }
     .wl-group-card {
       background: #181c27;
       border: 1px solid #363a45;
       border-radius: 6px;
-      overflow: visible;
+      overflow: hidden;
       flex: 0 0 auto;
     }
     .wl-group-head {
