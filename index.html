@@ -12,7 +12,7 @@
     h1 { font-size: 14px; color: #fff; white-space: nowrap; }
     #status-badge { font-size: 12px; padding: 3px 8px; border-radius: 4px; background: #2a2e39; color: #4caf50; max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     select, input, button { background: #2a2e39; color: #d1d4dc; border: 1px solid #363a45; padding: 3px 6px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
-    select#symbol-select { max-width: 145px; }
+    select#symbol-select { max-width: 155px; }
     select#line-width-select { width: 72px; }
     input#custom-symbol { width: 105px; }
     input#rect-ratios { width: 110px; font-size: 11px; }
@@ -219,6 +219,13 @@
           <option value="^FTSE">英國富時 100 (^FTSE)</option>
           <option value="^FCHI">法國 CAC 40 (^FCHI)</option>
         </optgroup>
+        <optgroup label="🥇 黃金、石油與外匯匯率">
+          <option value="GC=F">黃金期貨 (GC=F)</option>
+          <option value="CL=F">原油期貨 (CL=F)</option>
+          <option value="TWD=X">美元/台幣 (TWD=X)</option>
+          <option value="JPY=X">美元/日圓 (JPY=X)</option>
+          <option value="JPYTWD=X">日圓/台幣 相對匯率 (JPYTWD=X)</option>
+        </optgroup>
         <optgroup label="🪙 加密貨幣">
           <option value="BTCUSDT">BTC / USDT</option>
           <option value="ETHUSDT">ETH / USDT</option>
@@ -264,6 +271,7 @@
         <option value="ray">↗️ 兩點雙向延長切線</option>
         <option value="ellipse">⭕ 橢圓形</option>
         <option value="rect">⬜ 四方形(倍數)</option>
+        <option value="measure">📏 起終點百分比/差值</option>
         <option value="textBox">💬 文字數字註記框</option>
       </select>
       <button id="draw-btn">➕ 畫圖</button>
@@ -307,7 +315,7 @@
     </div>
   </div>
 
-  <script src="./data.js?v=38"></script>
-  <script src="./app.js?v=38"></script>
+  <script src="./data.js?v=39"></script>
+  <script src="./app.js?v=39"></script>
 </body>
 </html>
