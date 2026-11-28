@@ -76,46 +76,30 @@ function initApp() {
   const noteCancelBtn = document.getElementById('note-cancel-btn');
   const noteConfirmBtn = document.getElementById('note-confirm-btn');
 
-  // ===== 自訂自選名單（分類族群、排序、命名、雲端同步） =====
-  // 將原本下拉選單的股票指數轉為預設自選族群，方便你任意改名、排序或新增/刪除
+  // ===== 自訂分類族群、排序、命名自選名單 =====
   const DEFAULT_WATCHLIST_GROUPS = [
     {
-      id: 'grp_us_index_hot',
-      name: '美國指數與熱門股',
+      id: 'grp_us_giants',
+      name: '🇺🇸 美國巨頭',
       items: [
-        { symbol: '^GSPC', label: '標普 500' },
-        { symbol: '^IXIC', label: '那斯達克綜合' },
-        { symbol: '^DJI', label: '道瓊工業' },
-        { symbol: '^SOX', label: '費城半導體' },
-        { symbol: '^VIX', label: 'VIX 恐慌指數' },
-        { symbol: 'NVDA', label: 'NVIDIA' },
-        { symbol: 'SPY', label: 'SPY ETF' },
-        { symbol: 'QQQ', label: 'QQQ ETF' }
-      ]
-    },
-    {
-      id: 'grp_asia_eu_index',
-      name: '亞歐全球主要指數',
-      items: [
-        { symbol: '^N225', label: '日本日經 225' },
-        { symbol: '^KS11', label: '韓國 KOSPI' },
-        { symbol: '^HSI', label: '香港恆生指數' },
-        { symbol: '000001.SS', label: '中國上證指數' },
-        { symbol: '^GDAXI', label: '德國 DAX' },
-        { symbol: '^FTSE', label: '英國富時 100' },
-        { symbol: '^FCHI', label: '法國 CAC 40' }
-      ]
-    },
-    {
-      id: 'grp_commodities_fx',
-      name: '黃金、石油與外匯匯率',
-      items: [
-        { symbol: 'GC=F', label: '黃金期貨' }
+        { symbol: 'MSFT', label: '微軟 Microsoft' },
+        { symbol: 'AAPL', label: '蘋果 Apple' },
+        { symbol: 'NVDA', label: '輝達 NVIDIA' },
+        { symbol: 'GOOGL', label: 'Google Alphabet' },
+        { symbol: 'AMZN', label: '亞馬遜 Amazon' },
+        { symbol: 'META', label: 'Meta Platforms' },
+        { symbol: 'ORCL', label: '甲骨文 Oracle' },
+        { symbol: 'INTC', label: '英特爾 Intel' },
+        { symbol: 'TSLA', label: '特斯拉 Tesla' },
+        { symbol: 'SPCX', label: 'SpaceX' },
+        { symbol: 'TSM', label: '台積電 ADR' },
+        { symbol: 'MU', label: '美光 Micron' },
+        { symbol: 'AMD', label: '超微 AMD' },
+        { symbol: 'ANT', label: 'Anthropic' }
       ]
     }
   ];
-
-  const WL_LOCAL_KEY = 'market_watchlist_groups_v2';
+  const WL_LOCAL_KEY = 'market_watchlist_groups_v1';
   let watchlistGroups = [];
   let watchlistInitialized = false;
 
@@ -183,33 +167,29 @@ function initApp() {
     }
   }
 
-  // 下拉選單全部改為自選名單族群（保留台積電 2330.TW 作為預設初始選項）
   function renderWatchlistDropdown() {
     const prevVal = symbolSelect.value;
-    symbolSelect.innerHTML = '';
+    const legacyFavGroup = document.getElementById('fav-group');
+    if (legacyFavGroup) legacyFavGroup.remove();
 
-    const defaultOpt = document.createElement('option');
-    defaultOpt.value = '2330.TW';
-    defaultOpt.textContent = '台積電 (2330.TW)';
-    symbolSelect.appendChild(defaultOpt);
+    symbolSelect.querySelectorAll('optgroup[data-custom-wl="1"]').forEach(el => el.remove());
 
+    const firstGroup = symbolSelect.querySelector('optgroup');
     watchlistGroups.forEach(grp => {
       const og = document.createElement('optgroup');
-      og.label = grp.name;
+      og.label = `⭐ ${grp.name}`;
+      og.dataset.customWl = '1';
       (grp.items || []).forEach(it => {
         const opt = document.createElement('option');
         opt.value = it.symbol;
         opt.textContent = it.label ? `${it.label} (${it.symbol})` : it.symbol;
         og.appendChild(opt);
       });
-      symbolSelect.appendChild(og);
+      if (firstGroup) symbolSelect.insertBefore(og, firstGroup);
+      else symbolSelect.appendChild(og);
     });
 
-    if (prevVal && symbolSelect.querySelector(`option[value="${CSS.escape(prevVal)}"]`)) {
-      symbolSelect.value = prevVal;
-    } else {
-      symbolSelect.value = '2330.TW';
-    }
+    if (prevVal) symbolSelect.value = prevVal;
     updateFavButtonState();
   }
 
@@ -277,7 +257,7 @@ function initApp() {
         if (!confirm(`確定要刪除整個「${grp.name}」族群及其內部清單嗎？`)) return;
         watchlistGroups.splice(gIdx, 1);
         if (watchlistGroups.length === 0) {
-          watchlistGroups.push({ id: 'grp_' + Date.now(), name: '我的自選', items: [] });
+          watchlistGroups.push({ id: 'grp_' + Date.now(), name: '預設自選', items: [] });
         }
         await saveWatchlistGroups();
       };
@@ -292,7 +272,7 @@ function initApp() {
       if (!grp.items || grp.items.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'wl-empty-tip';
-        empty.textContent = '此族群目前尚無項目，可從上方輸入代號加入或由其他族群移動過來。';
+        empty.textContent = '此族群目前尚無股票，可從上方輸入代號加入或由其他族群移動過來。';
         itemsWrap.appendChild(empty);
       } else {
         grp.items.forEach((it, iIdx) => {
@@ -414,14 +394,14 @@ function initApp() {
   let hoveredTarget = null;
   let dragState = null;
   let suppressNextClick = false;
-  let currentSymbol = symbolSelect.value || '2330.TW', currentName = '台積電', currentInterval = intervalSelect.value;
+  let currentSymbol = symbolSelect.value, currentName = '台積電', currentInterval = intervalSelect.value;
   let unsub = null, liveTimer = null, favMap = {}, lastCandles = [], syncingCross = false, indicators = null;
   let subDataMap = new Map();
   let keyboardBarIndex = -1;
   let isPaneResizing = false;
   let customPaneHeights = null;
 
-  // 先載入本機快取並渲染下拉選單
+  // 先載入本機快取並渲染下拉選單，避免啟動閃爍
   try {
     const cached = JSON.parse(localStorage.getItem(WL_LOCAL_KEY) || 'null');
     watchlistGroups = (Array.isArray(cached) && cached.length) ? cached : cloneDefaultWatchlist();
@@ -2166,7 +2146,7 @@ function initApp() {
     syncingCross = false;
   });
 
-  // 雲端同步自選分類（若雲端尚無資料，自動併入舊版 watchlist_v2 並上傳）
+  // 雲端同步自選分類（若雲端尚無資料，自動併入舊版 watchlist_v2 與預設 14 檔美國巨頭並上傳）
   db.collection('user_settings').doc('watchlist_groups_v1').onSnapshot(async doc => {
     if (doc.exists && Array.isArray(doc.data().groups) && doc.data().groups.length > 0) {
       watchlistGroups = doc.data().groups;
@@ -2256,7 +2236,7 @@ function initApp() {
         lastCandles = res.data;
         const customMatch = findWatchlistItem(currentSymbol);
         currentName = customMatch?.item?.label || await window.MarketAPI.fetchChineseName(currentSymbol, symbolSelect, favMap);
-        if (symbolSelect.querySelector(`option[value="${CSS.escape(currentSymbol)}"]`)) {
+        if (symbolSelect.querySelector(`option[value="${currentSymbol}"]`)) {
           symbolSelect.value = currentSymbol;
         }
         updateFavButtonState();
@@ -2277,7 +2257,7 @@ function initApp() {
   }
 
   function switchSymbol(s) {
-    const clean = normalizeSymbolCode(s);
+    const clean = s.trim().toUpperCase();
     if (!clean) return;
     if (liveTimer) clearInterval(liveTimer);
     isDrawMode = false;
