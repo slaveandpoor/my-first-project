@@ -23,11 +23,13 @@
     label.chk { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; background: #2a2e39; border: 1px solid #363a45; padding: 3px 6px; border-radius: 4px; cursor: pointer; user-select: none; white-space: nowrap; }
     label.chk input { width: auto; margin: 0; }
     #charts-wrapper { flex: 1 1 auto; display: flex; flex-direction: column; width: 100%; min-height: 0; overflow: hidden; }
-    #chart-container { flex: 4 1 0; width: 100%; min-height: 0; position: relative; border-bottom: 2px solid #363a45; touch-action: none; }
+    #chart-container { flex: 3.4 1 0; width: 100%; min-height: 0; position: relative; border-bottom: 2px solid #363a45; touch-action: none; }
     #draw-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 6; pointer-events: none; }
-    #volume-container { flex: 1 1 0; width: 100%; min-height: 0; position: relative; touch-action: none; }
+    #volume-container { flex: 1 1 0; width: 100%; min-height: 0; position: relative; border-bottom: 2px solid #363a45; touch-action: none; }
+    #sub-indicator-container { flex: 1.25 1 0; width: 100%; min-height: 0; position: relative; touch-action: none; }
     #ohlc-legend { position: absolute; top: 8px; left: 10px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.84); padding: 5px 9px; border-radius: 4px; pointer-events: none; line-height: 1.5; max-width: calc(100% - 92px); }
     #vol-legend { position: absolute; top: 4px; left: 10px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.84); padding: 2px 8px; border-radius: 4px; pointer-events: none; color: #9598a1; max-width: calc(100% - 92px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #sub-legend { position: absolute; top: 4px; left: 10px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.84); padding: 2px 8px; border-radius: 4px; pointer-events: none; color: #d1d4dc; max-width: calc(100% - 92px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     #drawings-panel {
       display: none;
@@ -55,7 +57,6 @@
     .item-del-btn { background: #8e2430; color: #fff; border: none; padding: 2px 7px; border-radius: 3px; font-size: 11px; }
     .item-del-btn:hover { background: #ef5350; }
 
-    /* 手機版專屬響應式樣式 */
     @media (max-width: 768px) {
       header {
         flex: 0 0 auto;
@@ -82,8 +83,9 @@
       input#custom-symbol { width: 78px; }
       input#rect-ratios { width: 92px; font-size: 10px; }
       input[type="color"] { width: 24px; height: 22px; }
-      #chart-container { flex: 3.6 1 0; }
-      #volume-container { flex: 1.2 1 0; }
+      #chart-container { flex: 3.1 1 0; }
+      #volume-container { flex: 1.05 1 0; }
+      #sub-indicator-container { flex: 1.25 1 0; }
       #ohlc-legend {
         top: 4px;
         left: 6px;
@@ -92,7 +94,7 @@
         padding: 3px 6px;
         max-width: calc(100% - 68px);
       }
-      #vol-legend {
+      #vol-legend, #sub-legend {
         top: 3px;
         left: 6px;
         font-size: 10.5px;
@@ -205,8 +207,9 @@
       </div>
     </div>
     <div id="volume-container"><div id="vol-legend">成交量</div></div>
+    <div id="sub-indicator-container"><div id="sub-legend">附圖指標</div></div>
   </div>
-  <script src="./data.js?v=26"></script>
-  <script src="./app.js?v=26"></script>
+  <script src="./data.js?v=27"></script>
+  <script src="./app.js?v=27"></script>
 </body>
 </html>
