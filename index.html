@@ -1,593 +1,477 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>全球看盤</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>全球全市場雲端看盤系統</title>
   <style>
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      background: #131722;
-      color: #d1d4dc;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft JhengHei", "PingFang TC", sans-serif;
-      overflow: hidden;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100vw; height: 100dvh; overflow: hidden; background: #131722; color: #d1d4dc; font-family: sans-serif; display: flex; flex-direction: column; }
+    header { flex: 0 0 auto; min-height: 46px; display: flex; align-items: center; justify-content: space-between; padding: 4px 10px; background: #1e222d; border-bottom: 1px solid #2a2e39; gap: 6px; overflow: hidden; }
+    .group { display: flex; align-items: center; gap: 5px; flex-wrap: nowrap; min-width: 0; }
+    h1 { font-size: 14px; color: #fff; white-space: nowrap; }
+    #status-badge { font-size: 12px; padding: 3px 8px; border-radius: 4px; background: #2a2e39; color: #4caf50; max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    select, input, button { background: #2a2e39; color: #d1d4dc; border: 1px solid #363a45; padding: 3px 6px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
+    select#symbol-select { max-width: 175px; }
+    select#line-width-select { width: 72px; }
+    input#custom-symbol { width: 105px; }
+    input#rect-ratios { width: 110px; font-size: 11px; }
+    input[type="color"] { width: 28px; height: 24px; padding: 1px; cursor: pointer; }
+    button { cursor: pointer; }
+    button.active { background: #2962ff; color: #fff; border-color: #2962ff; }
+    button.danger { background: #b22833; color: #fff; }
+    button.primary { background: #2962ff; color: #fff; border-color: #2962ff; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    label.chk { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; background: #2a2e39; border: 1px solid #363a45; padding: 3px 6px; border-radius: 4px; cursor: pointer; user-select: none; white-space: nowrap; }
+    label.chk input { width: auto; margin: 0; }
 
-    #app-shell {
-      display: flex;
-      flex-direction: column;
-      width: 100%;
-      height: 100%;
-    }
+    #charts-wrapper { flex: 1 1 auto; display: flex; flex-direction: column; width: 100%; min-height: 0; overflow: hidden; }
+    #chart-container { flex: 3.4 1 0; width: 100%; min-height: 70px; position: relative; touch-action: none; }
+    #draw-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 6; pointer-events: none; }
+    #volume-container { flex: 1 1 0; width: 100%; min-height: 45px; position: relative; touch-action: none; }
+    #sub-indicator-container { flex: 1.25 1 0; width: 100%; min-height: 45px; position: relative; touch-action: none; }
 
-    /* 頂部工具列 */
-    #top-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 10px;
-      background: #1a1f2e;
-      border-bottom: 1px solid #2a2e39;
-      z-index: 20;
-      flex-shrink: 0;
-    }
-
-    .brand-title {
-      font-weight: 700;
-      font-size: 14px;
-      color: #fff;
-      margin-right: 2px;
-      white-space: nowrap;
-    }
-
-    select, input[type="text"], button {
-      background: #252b3d;
-      color: #e5e7eb;
-      border: 1px solid #363d52;
-      border-radius: 5px;
-      padding: 4px 8px;
-      font-size: 12px;
-      height: 28px;
-    }
-    select:focus, input[type="text"]:focus, textarea:focus {
-      outline: none;
-      border-color: #2962ff;
-    }
-    button {
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    button:hover:not(:disabled) {
-      background: #313950;
-      border-color: #4b5575;
-    }
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-    button.active {
-      background: #2962ff;
-      border-color: #4c7dff;
-      color: #fff;
-      font-weight: 600;
-    }
-    button.danger {
-      border-color: #7f2d36;
-      color: #ff8a93;
-    }
-    button.danger:hover:not(:disabled) {
-      background: #4a1c22;
-    }
-
-    #custom-symbol { width: 96px; }
-    #rect-ratios { width: 96px; }
-    input[type="color"] {
-      width: 28px;
-      height: 28px;
-      padding: 1px;
-      border: 1px solid #363d52;
-      border-radius: 5px;
-      background: #252b3d;
-      cursor: pointer;
-    }
-
-    .toolbar-sep {
-      width: 1px;
-      height: 18px;
-      background: #2f3547;
-      margin: 0 2px;
-    }
-
-    .chk-label {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 12px;
-      color: #d1d4dc;
-      cursor: pointer;
-      user-select: none;
-      white-space: nowrap;
-    }
-    .chk-label input[type="checkbox"] {
-      margin: 0;
-      cursor: pointer;
-    }
-
-    #status-badge {
-      margin-left: auto;
-      font-size: 12px;
-      color: #4caf50;
-      white-space: nowrap;
-      padding: 2px 6px;
-    }
-
-    /* 圖表主區域 */
-    #charts-wrapper {
-      position: relative;
-      flex: 1 1 auto;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      width: 100%;
-    }
-
-    #chart-container {
-      position: relative;
-      width: 100%;
-      flex: 3.4 1 0;
-      min-height: 70px;
-    }
-
-    #volume-container {
-      position: relative;
-      width: 100%;
-      flex: 1 1 0;
-      min-height: 45px;
-    }
-
-    #sub-indicator-container {
-      position: relative;
-      width: 100%;
-      flex: 1.25 1 0;
-      min-height: 45px;
-    }
-
-    /* 窗格分隔拖曳條 */
     .pane-resizer {
-      height: 5px;
+      flex: 0 0 6px;
+      height: 6px;
       width: 100%;
       background: #1e222d;
+      border-top: 1px solid #363a45;
+      border-bottom: 1px solid #363a45;
       cursor: ns-resize;
-      flex-shrink: 0;
       position: relative;
       z-index: 15;
+      touch-action: none;
       transition: background 0.15s;
+    }
+    .pane-resizer::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 36px;
+      height: 2px;
+      border-radius: 2px;
+      background: #5d606b;
     }
     .pane-resizer:hover, .pane-resizer.dragging {
       background: #2962ff;
     }
-
-    /* 繪圖覆蓋畫布 */
-    #draw-canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 10;
+    .pane-resizer:hover::after, .pane-resizer.dragging::after {
+      background: #ffffff;
     }
 
-    /* 圖例文字 */
-    .legend-box {
-      position: absolute;
-      top: 6px;
-      left: 8px;
-      z-index: 12;
-      font-size: 11px;
-      line-height: 1.45;
-      color: #d1d4dc;
-      background: rgba(19, 23, 34, 0.55);
-      padding: 3px 6px;
-      border-radius: 4px;
-      pointer-events: none;
-      max-width: calc(100% - 92px);
-    }
+    #ohlc-legend { position: absolute; top: 8px; left: 10px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.84); padding: 5px 9px; border-radius: 4px; pointer-events: none; line-height: 1.5; max-width: calc(100% - 92px); }
+    #vol-legend { position: absolute; top: 4px; left: 10px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.84); padding: 2px 8px; border-radius: 4px; pointer-events: none; color: #9598a1; max-width: calc(100% - 92px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #sub-legend { position: absolute; top: 4px; left: 10px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.84); padding: 2px 8px; border-radius: 4px; pointer-events: none; color: #d1d4dc; max-width: calc(100% - 92px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    /* 雲端繪圖清單側邊抽屜 */
     #drawings-panel {
-      position: fixed;
-      top: 42px;
-      right: 12px;
-      width: 310px;
-      max-height: calc(100vh - 60px);
-      background: #1b2030;
-      border: 1px solid #343b52;
-      border-radius: 8px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
       display: none;
+      position: absolute;
+      top: 10px;
+      right: 86px;
+      width: 340px;
+      max-width: calc(100% - 100px);
+      max-height: 70%;
+      background: rgba(30, 34, 45, 0.96);
+      border: 1px solid #363a45;
+      border-radius: 6px;
+      z-index: 20;
       flex-direction: column;
-      z-index: 40;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.55);
     }
     #drawings-panel.open { display: flex; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid #363a45; font-size: 13px; font-weight: bold; color: #fff; }
+    .panel-actions { display: flex; gap: 6px; padding: 6px 10px; border-bottom: 1px solid #2a2e39; background: #181c27; flex-wrap: wrap; }
+    #drawings-list { overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 5px; }
+    .draw-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; background: #242834; border: 1px solid #363a45; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    .draw-item.selected { border-color: #2962ff; background: #233154; }
+    .draw-item-info { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .color-dot { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto; border: 1px solid rgba(255,255,255,0.4); }
+    .item-del-btn { background: #8e2430; color: #fff; border: none; padding: 2px 7px; border-radius: 3px; font-size: 11px; }
+    .item-del-btn:hover { background: #ef5350; }
 
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 9px 12px;
-      border-bottom: 1px solid #2c3347;
-      font-size: 13px;
-      font-weight: 700;
-      color: #fff;
-    }
-    .panel-body {
-      padding: 8px;
-      overflow-y: auto;
-      flex: 1;
-    }
-    .panel-footer {
-      padding: 8px 10px;
-      border-top: 1px solid #2c3347;
-      display: flex;
-      justify-content: space-between;
-      gap: 6px;
-    }
-    .draw-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
-      padding: 6px 8px;
-      border-radius: 5px;
-      font-size: 12px;
-      cursor: pointer;
-      border: 1px solid transparent;
-    }
-    .draw-item:hover { background: #242b40; }
-    .draw-item.selected {
-      background: rgba(41, 98, 255, 0.22);
-      border-color: #2962ff;
-    }
-    .draw-item-info {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .color-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .item-del-btn {
-      height: 22px;
-      padding: 0 7px;
-      font-size: 11px;
-    }
-
-    /* 註記 Modal 與 自選管理 Modal */
-    .modal-backdrop {
+    /* 自選名單分類、排序、命名管理視窗 */
+    #watchlist-modal-backdrop {
+      display: none;
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.65);
-      display: none;
+      z-index: 60;
       align-items: center;
       justify-content: center;
-      z-index: 60;
       padding: 14px;
     }
-    .modal-backdrop.open { display: flex; }
-
-    .modal-card {
-      width: 100%;
-      max-width: 400px;
-      background: #1b2030;
-      border: 1px solid #353d56;
+    #watchlist-modal-backdrop.open { display: flex; }
+    #watchlist-modal {
+      width: 680px;
+      max-width: 100%;
+      max-height: 88dvh;
+      background: #1e222d;
+      border: 1px solid #363a45;
       border-radius: 8px;
-      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.65);
-      overflow: hidden;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.72);
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
-    .modal-card.wl-modal-card {
-      max-width: 680px;
-      max-height: 86vh;
-    }
-    .modal-header {
+    .wl-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 10px 14px;
-      border-bottom: 1px solid #2c3347;
+      background: #181c27;
+      border-bottom: 1px solid #363a45;
       font-size: 14px;
-      font-weight: 700;
+      font-weight: bold;
       color: #fff;
     }
-    .modal-body {
-      padding: 12px 14px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .modal-footer {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      padding: 10px 14px;
-      border-top: 1px solid #2c3347;
-    }
-    #note-textarea {
-      width: 100%;
-      min-height: 96px;
-      background: #131722;
-      color: #e5e7eb;
-      border: 1px solid #363d52;
-      border-radius: 6px;
-      padding: 8px 10px;
-      font-size: 13px;
-      resize: vertical;
-    }
-
-    /* 自選族群管理樣式 */
-    .wl-toolbar-row {
+    .wl-toolbar {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
+      padding: 10px 14px;
+      background: #242834;
+      border-bottom: 1px solid #363a45;
       align-items: center;
-      background: #151926;
-      padding: 8px 10px;
-      border-radius: 6px;
-      border: 1px solid #293044;
+    }
+    .wl-toolbar input { background: #131722; }
+    .wl-body {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
     .wl-group-card {
-      background: #151926;
-      border: 1px solid #2b3247;
+      background: #181c27;
+      border: 1px solid #363a45;
       border-radius: 6px;
-      padding: 8px 10px;
+      overflow: hidden;
     }
     .wl-group-head {
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
       gap: 6px;
-      padding-bottom: 6px;
-      margin-bottom: 6px;
-      border-bottom: 1px solid #252c3f;
+      padding: 8px 10px;
+      background: #252a38;
+      border-bottom: 1px solid #363a45;
+      flex-wrap: wrap;
     }
     .wl-group-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: #fff;
-    }
-    .wl-group-actions, .wl-item-btns {
       display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
       align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #ffd54f;
+    }
+    .wl-group-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
     }
     .wl-items {
+      padding: 6px 8px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 5px;
     }
     .wl-item-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
-      padding: 5px 8px;
-      background: #1d2334;
+      gap: 6px;
+      padding: 6px 8px;
+      background: #1e222d;
+      border: 1px solid #2e3340;
       border-radius: 4px;
-      font-size: 12px;
+      flex-wrap: wrap;
     }
     .wl-item-left {
       display: flex;
       align-items: center;
       gap: 8px;
-      min-width: 0;
+      min-width: 180px;
       flex: 1;
     }
     .wl-sym-badge {
-      background: #2a334d;
-      color: #90caf9;
+      background: #2a2e39;
+      color: #64b5f6;
+      border: 1px solid #3c4252;
       padding: 2px 6px;
-      border-radius: 4px;
-      font-weight: 700;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 11px;
       cursor: pointer;
-      flex-shrink: 0;
-    }
-    .wl-sym-badge:hover {
-      background: #2962ff;
-      color: #fff;
     }
     .wl-name-text {
-      color: #e5e7eb;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-size: 12.5px;
+      color: #fff;
       cursor: pointer;
     }
-    .wl-name-text:hover {
-      color: #ffeb3b;
-      text-decoration: underline;
+    .wl-name-text:hover { text-decoration: underline; color: #90caf9; }
+    .wl-item-btns {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
     }
-    .wl-mini-btn {
-      height: 22px;
-      padding: 0 6px;
-      font-size: 11px;
+    .wl-mini-btn { padding: 2px 6px; font-size: 11px; }
+    .wl-empty-tip { font-size: 12px; color: #8c92a4; padding: 6px 4px; }
+
+    #text-modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
     }
-    .wl-empty-tip {
-      font-size: 12px;
-      color: #8b90a0;
-      padding: 6px 4px;
+    #text-modal-backdrop.open { display: flex; }
+    #text-modal {
+      width: 350px;
+      max-width: 100%;
+      background: #1e222d;
+      border: 1px solid #363a45;
+      border-radius: 6px;
+      padding: 12px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
+    #text-modal-title { font-size: 14px; color: #fff; }
+    #note-textarea {
+      width: 100%;
+      min-height: 88px;
+      background: #131722;
+      color: #fff;
+      border: 1px solid #363a45;
+      border-radius: 4px;
+      padding: 8px;
+      font-size: 13px;
+      line-height: 1.45;
+      resize: vertical;
+      white-space: pre-wrap;
+    }
+    .modal-hint { font-size: 11px; color: #9598a1; }
+    .modal-btns { display: flex; justify-content: flex-end; gap: 8px; }
 
     @media (max-width: 768px) {
-      #top-toolbar { padding: 5px 6px; gap: 4px; }
-      select, input[type="text"], button { height: 26px; font-size: 11px; padding: 2px 6px; }
-      #custom-symbol { width: 78px; }
-      #rect-ratios { width: 76px; }
-      #status-badge { font-size: 11px; }
+      header {
+        flex: 0 0 auto;
+        height: auto;
+        max-height: 84px;
+        flex-direction: column;
+        align-items: stretch;
+        padding: 4px 6px;
+        gap: 4px;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+      .group {
+        gap: 4px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+      }
+      .group::-webkit-scrollbar { display: none; }
+      h1 { font-size: 13px; }
+      #status-badge { font-size: 11px; padding: 2px 6px; max-width: 135px; }
+      select, input, button, label.chk { font-size: 11px; padding: 3px 5px; }
+      select#symbol-select { max-width: 125px; }
+      select#line-width-select { width: 64px; }
+      input#custom-symbol { width: 78px; }
+      input#rect-ratios { width: 88px; font-size: 10px; }
+      input[type="color"] { width: 24px; height: 22px; }
+      .pane-resizer { flex: 0 0 8px; height: 8px; }
+      #ohlc-legend {
+        top: 4px;
+        left: 6px;
+        font-size: 10.5px;
+        line-height: 1.35;
+        padding: 3px 6px;
+        max-width: calc(100% - 68px);
+      }
+      #vol-legend, #sub-legend {
+        top: 3px;
+        left: 6px;
+        font-size: 10.5px;
+        padding: 2px 6px;
+        max-width: calc(100% - 68px);
+      }
+      #drawings-panel {
+        top: 6px;
+        right: 64px;
+        width: calc(100% - 74px);
+        max-width: 300px;
+        max-height: 75%;
+      }
     }
   </style>
 </head>
 <body>
-  <div id="app-shell">
-    <div id="top-toolbar">
-      <span class="brand-title">📈 全球看盤</span>
-
-      <select id="symbol-select" title="選擇自選股票 / 指數">
-        <option value="2330.TW">台積電 (2330.TW)</option>
+  <header>
+    <div class="group">
+      <h1>📈 全球看盤</h1>
+      <select id="symbol-select">
+        <optgroup label="🇹🇼 台灣指數與熱門股">
+          <option value="^TWII">台灣加權指數 (^TWII)</option>
+          <option value="2330.TW" selected>台積電 (2330.TW)</option>
+          <option value="0050.TW">元大台灣50 (0050.TW)</option>
+          <option value="00878.TW">國泰永續高股息 (00878.TW)</option>
+          <option value="8069.TWO">元太 (8069.TWO)</option>
+          <option value="5347.TWO">世界 (5347.TWO)</option>
+          <option value="4958.TW">臻鼎-KY (4958.TW)</option>
+        </optgroup>
+        <optgroup label="🇺🇸 美國指數與熱門股">
+          <option value="^GSPC">標普 500 (^GSPC)</option>
+          <option value="^IXIC">那斯達克綜合 (^IXIC)</option>
+          <option value="^DJI">道瓊工業 (^DJI)</option>
+          <option value="^SOX">費城半導體 (^SOX)</option>
+          <option value="^VIX">VIX 恐慌指數 (^VIX)</option>
+          <option value="NVDA">NVIDIA (NVDA)</option>
+          <option value="SPY">SPY ETF</option>
+          <option value="QQQ">QQQ ETF</option>
+        </optgroup>
+        <optgroup label="🌏 亞歐全球主要指數">
+          <option value="^N225">日本日經 225 (^N225)</option>
+          <option value="^KS11">韓國 KOSPI (^KS11)</option>
+          <option value="^HSI">香港恆生指數 (^HSI)</option>
+          <option value="000001.SS">中國上證指數 (000001.SS)</option>
+          <option value="^GDAXI">德國 DAX (^GDAXI)</option>
+          <option value="^FTSE">英國富時 100 (^FTSE)</option>
+          <option value="^FCHI">法國 CAC 40 (^FCHI)</option>
+        </optgroup>
+        <optgroup label="🥇 黃金、石油與外匯匯率">
+          <option value="GC=F">黃金期貨 (GC=F)</option>
+          <option value="XAUUSD=X">黃金現貨 (XAUUSD=X)</option>
+          <option value="GLD">SPDR 黃金 ETF (GLD)</option>
+          <option value="^HUI">金礦股指數 (^HUI)</option>
+          <option value="CL=F">輕原油期貨 (CL=F)</option>
+          <option value="BZ=F">布蘭特原油 (BZ=F)</option>
+          <option value="TWD=X">美元/台幣 (TWD=X)</option>
+          <option value="JPY=X">美元/日圓 (JPY=X)</option>
+          <option value="JPYTWD=X">日圓/台幣 相對匯率 (JPYTWD=X)</option>
+        </optgroup>
+        <optgroup label="🪙 加密貨幣">
+          <option value="BTCUSDT">BTC / USDT</option>
+          <option value="ETHUSDT">ETH / USDT</option>
+        </optgroup>
       </select>
-
-      <input type="text" id="custom-symbol" placeholder="代號(如2330)" />
-      <button id="search-btn" type="button">查詢</button>
-      <button id="fav-btn" type="button" title="加入或移除目前標的至自選">⭐ 自選</button>
-      <button id="manage-fav-btn" type="button" title="管理自選分類族群、排序與命名">🗂️ 自選管理</button>
-
-      <select id="interval-select" title="週期">
+      <input id="custom-symbol" type="text" placeholder="代號(如4958)" />
+      <button id="search-btn">查詢</button>
+      <button id="fav-btn" title="快速加入或移除目前標的">⭐ 自選</button>
+      <button id="manage-fav-btn" title="自訂自選分類族群、排序與命名">🗂️ 自選管理</button>
+      <select id="interval-select">
+        <option value="60m">1小時K</option>
         <option value="1d" selected>日線K</option>
         <option value="1wk">週線K</option>
         <option value="1mo">月線K</option>
-        <option value="60m">60分K</option>
       </select>
-
-      <div class="toolbar-sep"></div>
-
-      <label class="chk-label"><input type="checkbox" id="toggle-ma" checked /> 均線</label>
-      <label class="chk-label"><input type="checkbox" id="toggle-bb" checked /> 布林</label>
-      <label class="chk-label"><input type="checkbox" id="toggle-deduct" checked /> 扣抵</label>
-
-      <div class="toolbar-sep"></div>
-
-      <select id="draw-tool-select" title="繪圖工具">
-        <option value="hline">水平切線</option>
-        <option value="vline">垂直切線</option>
-        <option value="trend">兩點切線</option>
-        <option value="ray">兩點雙向延長切線</option>
-        <option value="ellipse">橢圓形</option>
-        <option value="rect">四方形(倍數)</option>
-        <option value="measure">起終點量測</option>
-        <option value="textBox">註記框</option>
+      <span id="status-badge">⏳ 啟動中...</span>
+    </div>
+    <div class="group">
+      <label class="chk"><input type="checkbox" id="toggle-ma" checked /> 均線</label>
+      <label class="chk"><input type="checkbox" id="toggle-bb" checked /> 布林</label>
+      <label class="chk"><input type="checkbox" id="toggle-deduct" checked /> 扣抵▲</label>
+      <select id="color-select" title="選擇畫線顏色（已選取圖形時可即時變色）">
+        <option value="#2962ff">🔵 藍</option>
+        <option value="#26a69a">🟢 綠</option>
+        <option value="#ef5350">🔴 紅</option>
+        <option value="#ffeb3b">🟡 黃</option>
+        <option value="#ffffff">⚪ 白</option>
+        <option value="#e040fb">🟣 紫</option>
+        <option value="#ff9800">🟠 橘</option>
       </select>
-
-      <input type="text" id="rect-ratios" value="0.333, 0.5, 0.6667" title="四方形倍數線比例" />
-
-      <select id="color-select" title="預設顏色">
-        <option value="#2962ff" selected>藍色</option>
-        <option value="#ef5350">紅色</option>
-        <option value="#26a69a">綠色</option>
-        <option value="#ffeb3b">黃色</option>
-        <option value="#ff9800">橘色</option>
-        <option value="#e040fb">紫色</option>
-        <option value="#ffffff">白色</option>
-      </select>
-      <input type="color" id="custom-color" value="#2962ff" title="自訂顏色" />
-
-      <select id="line-width-select" title="線條粗細">
+      <input type="color" id="custom-color" value="#2962ff" title="自訂任意顏色（已選取圖形時可即時變色）" />
+      <select id="line-width-select" title="選擇線條/框線粗細（已選取圖形時可即時調整）">
         <option value="1">1px</option>
         <option value="2" selected>2px</option>
         <option value="3">3px</option>
         <option value="4">4px</option>
         <option value="5">5px</option>
+        <option value="6">6px</option>
       </select>
-
-      <button id="draw-btn" type="button">✏️ 繪圖</button>
-      <button id="delete-selected-btn" type="button" disabled>🗑️ 刪選取</button>
-      <button id="manage-list-btn" type="button">📋 圖層</button>
-      <button id="clear-lines-btn" type="button" class="danger">🧹 清空</button>
-
-      <span id="status-badge">⏳ 載入中...</span>
+      <select id="draw-tool-select" title="選擇畫圖工具">
+        <option value="hline">➖ 水平切線</option>
+        <option value="vline">｜ 垂直切線</option>
+        <option value="trend">📈 兩點切線</option>
+        <option value="ray">↗️ 兩點雙向延長切線</option>
+        <option value="ellipse">⭕ 橢圓形</option>
+        <option value="rect">⬜ 四方形(倍數)</option>
+        <option value="measure">📏 起終點百分比/差值</option>
+        <option value="textBox">💬 文字數字註記框</option>
+      </select>
+      <button id="draw-btn">➕ 畫圖</button>
+      <input id="rect-ratios" type="text" value="0.333, 0.5, 0.6667" title="四方形倍數(由起點算，逗號分隔，按Enter即時更新)" placeholder="0.333,0.5,0.6667" />
+      <button id="delete-selected-btn" class="danger" disabled title="刪除目前選取的線條/圖形 (Delete鍵)">❌ 刪選取</button>
+      <button id="manage-list-btn" title="開啟繪圖清單">📋 清單</button>
+      <button id="clear-lines-btn" class="danger" title="清除全部雲端繪圖">🗑️ 全清</button>
     </div>
-
-    <div id="charts-wrapper">
-      <div id="chart-container">
-        <div id="ohlc-legend" class="legend-box"></div>
-        <canvas id="draw-canvas"></canvas>
-      </div>
-      <div id="resizer-main-vol" class="pane-resizer" title="拖曳調整主圖與成交量高度"></div>
-      <div id="volume-container">
-        <div id="vol-legend" class="legend-box"></div>
-      </div>
-      <div id="resizer-vol-sub" class="pane-resizer" title="拖曳調整成交量與附圖指標高度"></div>
-      <div id="sub-indicator-container">
-        <div id="sub-legend" class="legend-box"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 雲端繪圖圖層管理抽屜 -->
-  <div id="drawings-panel">
-    <div class="panel-header">
-      <span>📋 雲端繪圖圖層</span>
-      <button id="close-panel-btn" type="button" class="item-del-btn">✕</button>
-    </div>
-    <div id="drawings-list" class="panel-body"></div>
-    <div class="panel-footer">
-      <button id="del-checked-btn" type="button" class="danger item-del-btn">刪除勾選</button>
-    </div>
-  </div>
-
-  <!-- 文字/數字註記 Modal -->
-  <div id="text-modal-backdrop" class="modal-backdrop">
-    <div class="modal-card">
-      <div class="modal-header">
-        <span id="text-modal-title">💬 文字 / 數字註記</span>
-      </div>
-      <div class="modal-body">
-        <textarea id="note-textarea" placeholder="輸入註記內容（支援多行，Ctrl/Cmd + Enter 儲存）"></textarea>
-      </div>
-      <div class="modal-footer">
-        <button id="note-cancel-btn" type="button">取消</button>
-        <button id="note-confirm-btn" type="button" class="active">確定</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 自選分類、排序與命名管理 Modal -->
-  <div id="watchlist-modal-backdrop" class="modal-backdrop">
-    <div class="modal-card wl-modal-card">
-      <div class="modal-header">
-        <span>🗂️ 自選名單分類、排序與命名</span>
-        <button id="close-wl-btn" type="button" class="item-del-btn">✕</button>
-      </div>
-      <div class="modal-body">
-        <!-- 新增族群 -->
-        <div class="wl-toolbar-row">
-          <input type="text" id="wl-new-group-input" placeholder="新族群名稱 (如: 台股權值)" style="flex:1; min-width:140px;" />
-          <button id="wl-add-group-btn" type="button" class="active">＋ 新增族群</button>
+  </header>
+  <div id="charts-wrapper">
+    <div id="chart-container">
+      <div id="ohlc-legend">載入中...</div>
+      <canvas id="draw-canvas"></canvas>
+      <div id="drawings-panel">
+        <div class="panel-header">
+          <span>📋 雲端繪圖管理（點選高亮 / 單筆刪除）</span>
+          <button id="close-panel-btn" style="padding:2px 6px;">✕</button>
         </div>
-
-        <!-- 新增股票至指定族群 -->
-        <div class="wl-toolbar-row">
-          <input type="text" id="wl-add-sym-input" placeholder="代號 (如 NVDA 或 2330)" style="width:130px;" />
-          <input type="text" id="wl-add-name-input" placeholder="自訂顯示名稱 (可留空)" style="flex:1; min-width:130px;" />
-          <select id="wl-target-group-select" title="選擇加入的族群"></select>
-          <button id="wl-add-item-btn" type="button">＋ 加入清單</button>
+        <div class="panel-actions">
+          <button id="del-checked-btn" class="danger" style="font-size:12px;">刪除已勾選</button>
+          <span style="font-size:11px; color:#9598a1; align-self:center;">拖曳移動；雙擊註記框可編輯</span>
         </div>
-
-        <!-- 各族群列表 -->
-        <div id="watchlist-groups-container" style="display:flex; flex-direction:column; gap:8px;"></div>
+        <div id="drawings-list"></div>
       </div>
-      <div class="modal-footer">
-        <span style="margin-right:auto; font-size:11px; color:#9598a1;">💡 點擊代號可直接看盤；點擊名稱可重新命名；支援上下排序與跨族群移動。</span>
+    </div>
+    <div id="resizer-main-vol" class="pane-resizer" title="上下拖曳調整主圖與成交量圖高度"></div>
+    <div id="volume-container"><div id="vol-legend">成交量</div></div>
+    <div id="resizer-vol-sub" class="pane-resizer" title="上下拖曳調整成交量圖與技術指標附圖高度"></div>
+    <div id="sub-indicator-container"><div id="sub-legend">附圖指標</div></div>
+  </div>
+
+  <!-- 自選名單分類、排序、命名管理視窗 -->
+  <div id="watchlist-modal-backdrop">
+    <div id="watchlist-modal">
+      <div class="wl-header">
+        <span>🗂️ 自選名單管理（自訂分類族群、排序、命名）</span>
+        <button id="close-wl-btn" style="padding:2px 8px;">✕</button>
+      </div>
+      <div class="wl-toolbar">
+        <input id="wl-new-group-input" type="text" placeholder="新族群名稱（如：AI概念股）" style="width:170px;" />
+        <button id="wl-add-group-btn" class="primary">➕ 新增族群</button>
+        <span style="color:#5d606b;">|</span>
+        <input id="wl-add-sym-input" type="text" placeholder="代號（如：AAPL）" style="width:110px;" />
+        <input id="wl-add-name-input" type="text" placeholder="自訂顯示名稱（選填）" style="width:140px;" />
+        <select id="wl-target-group-select" style="max-width:130px;"></select>
+        <button id="wl-add-item-btn">加入自選</button>
+      </div>
+      <div id="watchlist-groups-container" class="wl-body"></div>
+    </div>
+  </div>
+
+  <div id="text-modal-backdrop">
+    <div id="text-modal">
+      <h3 id="text-modal-title">💬 輸入文字 / 數字註記</h3>
+      <textarea id="note-textarea" placeholder="可輸入任意文字、數字、價格、符號或換行內容..."></textarea>
+      <div class="modal-hint">Ctrl/Cmd + Enter 快速儲存；留空儲存可刪除註記框</div>
+      <div class="modal-btns">
+        <button id="note-cancel-btn">取消</button>
+        <button id="note-confirm-btn" class="primary">確定加入</button>
       </div>
     </div>
   </div>
 
-  <script src="./data.js?v=40"></script>
-  <script src="./app.js?v=40"></script>
+  <script src="./data.js?v=42"></script>
+  <script src="./app.js?v=42"></script>
 </body>
 </html>
