@@ -12,7 +12,7 @@
     h1 { font-size: 14px; color: #fff; white-space: nowrap; }
     #status-badge { font-size: 12px; padding: 3px 8px; border-radius: 4px; background: #2a2e39; color: #4caf50; max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     select, input, button { background: #2a2e39; color: #d1d4dc; border: 1px solid #363a45; padding: 3px 6px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
-    select#symbol-select { max-width: 155px; }
+    select#symbol-select { max-width: 175px; }
     select#line-width-select { width: 72px; }
     input#custom-symbol { width: 105px; }
     input#rect-ratios { width: 110px; font-size: 11px; }
@@ -20,6 +20,7 @@
     button { cursor: pointer; }
     button.active { background: #2962ff; color: #fff; border-color: #2962ff; }
     button.danger { background: #b22833; color: #fff; }
+    button.primary { background: #2962ff; color: #fff; border-color: #2962ff; }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
     label.chk { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; background: #2a2e39; border: 1px solid #363a45; padding: 3px 6px; border-radius: 4px; cursor: pointer; user-select: none; white-space: nowrap; }
     label.chk input { width: auto; margin: 0; }
@@ -91,6 +92,138 @@
     .item-del-btn { background: #8e2430; color: #fff; border: none; padding: 2px 7px; border-radius: 3px; font-size: 11px; }
     .item-del-btn:hover { background: #ef5350; }
 
+    /* 自選名單分類、排序、命名管理視窗 */
+    #watchlist-modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      z-index: 60;
+      align-items: center;
+      justify-content: center;
+      padding: 14px;
+    }
+    #watchlist-modal-backdrop.open { display: flex; }
+    #watchlist-modal {
+      width: 680px;
+      max-width: 100%;
+      max-height: 88dvh;
+      background: #1e222d;
+      border: 1px solid #363a45;
+      border-radius: 8px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.72);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .wl-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #181c27;
+      border-bottom: 1px solid #363a45;
+      font-size: 14px;
+      font-weight: bold;
+      color: #fff;
+    }
+    .wl-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px 14px;
+      background: #242834;
+      border-bottom: 1px solid #363a45;
+      align-items: center;
+    }
+    .wl-toolbar input { background: #131722; }
+    .wl-body {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .wl-group-card {
+      background: #181c27;
+      border: 1px solid #363a45;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .wl-group-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 8px 10px;
+      background: #252a38;
+      border-bottom: 1px solid #363a45;
+      flex-wrap: wrap;
+    }
+    .wl-group-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #ffd54f;
+    }
+    .wl-group-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .wl-items {
+      padding: 6px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .wl-item-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 6px 8px;
+      background: #1e222d;
+      border: 1px solid #2e3340;
+      border-radius: 4px;
+      flex-wrap: wrap;
+    }
+    .wl-item-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 180px;
+      flex: 1;
+    }
+    .wl-sym-badge {
+      background: #2a2e39;
+      color: #64b5f6;
+      border: 1px solid #3c4252;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .wl-name-text {
+      font-size: 12.5px;
+      color: #fff;
+      cursor: pointer;
+    }
+    .wl-name-text:hover { text-decoration: underline; color: #90caf9; }
+    .wl-item-btns {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .wl-mini-btn { padding: 2px 6px; font-size: 11px; }
+    .wl-empty-tip { font-size: 12px; color: #8c92a4; padding: 6px 4px; }
+
     #text-modal-backdrop {
       display: none;
       position: fixed;
@@ -130,7 +263,6 @@
     }
     .modal-hint { font-size: 11px; color: #9598a1; }
     .modal-btns { display: flex; justify-content: flex-end; gap: 8px; }
-    button.primary { background: #2962ff; color: #fff; border-color: #2962ff; }
 
     @media (max-width: 768px) {
       header {
@@ -154,7 +286,7 @@
       h1 { font-size: 13px; }
       #status-badge { font-size: 11px; padding: 2px 6px; max-width: 135px; }
       select, input, button, label.chk { font-size: 11px; padding: 3px 5px; }
-      select#symbol-select { max-width: 115px; }
+      select#symbol-select { max-width: 125px; }
       select#line-width-select { width: 64px; }
       input#custom-symbol { width: 78px; }
       input#rect-ratios { width: 88px; font-size: 10px; }
@@ -190,7 +322,6 @@
     <div class="group">
       <h1>📈 全球看盤</h1>
       <select id="symbol-select">
-        <optgroup id="fav-group" label="⭐ 我的雲端自選股"></optgroup>
         <optgroup label="🇹🇼 台灣指數與熱門股">
           <option value="^TWII">台灣加權指數 (^TWII)</option>
           <option value="2330.TW" selected>台積電 (2330.TW)</option>
@@ -221,6 +352,10 @@
         </optgroup>
         <optgroup label="🥇 黃金、石油與外匯匯率">
           <option value="GC=F">黃金期貨 (GC=F)</option>
+          <option value="XAUUSD=X">黃金現貨 (XAUUSD=X)</option>
+          <option value="GLD">SPDR 黃金 ETF (GLD)</option>
+          <option value="^HUI">金礦股指數 (^HUI)</option>
+          <option value="CL=F">輕原油期貨 (CL=F)</option>
           <option value="BZ=F">布蘭特原油 (BZ=F)</option>
           <option value="TWD=X">美元/台幣 (TWD=X)</option>
           <option value="JPY=X">美元/日圓 (JPY=X)</option>
@@ -233,7 +368,8 @@
       </select>
       <input id="custom-symbol" type="text" placeholder="代號(如4958)" />
       <button id="search-btn">查詢</button>
-      <button id="fav-btn" title="加入或移除雲端自選">⭐ 自選</button>
+      <button id="fav-btn" title="快速加入或移除目前標的">⭐ 自選</button>
+      <button id="manage-fav-btn" title="自訂自選分類族群、排序與命名">🗂️ 自選管理</button>
       <select id="interval-select">
         <option value="60m">1小時K</option>
         <option value="1d" selected>日線K</option>
@@ -303,6 +439,26 @@
     <div id="sub-indicator-container"><div id="sub-legend">附圖指標</div></div>
   </div>
 
+  <!-- 自選名單分類、排序、命名管理視窗 -->
+  <div id="watchlist-modal-backdrop">
+    <div id="watchlist-modal">
+      <div class="wl-header">
+        <span>🗂️ 自選名單管理（自訂分類族群、排序、命名）</span>
+        <button id="close-wl-btn" style="padding:2px 8px;">✕</button>
+      </div>
+      <div class="wl-toolbar">
+        <input id="wl-new-group-input" type="text" placeholder="新族群名稱（如：AI概念股）" style="width:170px;" />
+        <button id="wl-add-group-btn" class="primary">➕ 新增族群</button>
+        <span style="color:#5d606b;">|</span>
+        <input id="wl-add-sym-input" type="text" placeholder="代號（如：AAPL）" style="width:110px;" />
+        <input id="wl-add-name-input" type="text" placeholder="自訂顯示名稱（選填）" style="width:140px;" />
+        <select id="wl-target-group-select" style="max-width:130px;"></select>
+        <button id="wl-add-item-btn">加入自選</button>
+      </div>
+      <div id="watchlist-groups-container" class="wl-body"></div>
+    </div>
+  </div>
+
   <div id="text-modal-backdrop">
     <div id="text-modal">
       <h3 id="text-modal-title">💬 輸入文字 / 數字註記</h3>
@@ -315,7 +471,7 @@
     </div>
   </div>
 
-  <script src="./data.js?v=41"></script>
-  <script src="./app.js?v=41"></script>
+  <script src="./data.js?v=42"></script>
+  <script src="./app.js?v=42"></script>
 </body>
 </html>
