@@ -323,8 +323,8 @@ function initApp() {
   const bbUpperSeries = chart.addLineSeries(bbOpts);
   const bbMidSeries = chart.addLineSeries({
     ...bbOpts,
-    color: '#42a5f5',
-    lineWidth: 1.2
+    color: '#ef5350',
+    lineWidth: 1.5
   });
   const bbLowerSeries = chart.addLineSeries(bbOpts);
 
@@ -1277,7 +1277,12 @@ function initApp() {
     const len = lastCandles.length;
     const grouped = new Map();
 
-    MA_CONFIG.forEach(cfg => {
+    const deductPeriods = [
+      ...MA_CONFIG,
+      { period: 20, color: '#ef5350', label: 'BB20' }
+    ];
+
+    deductPeriods.forEach(cfg => {
       const idx = len - cfg.period;
       if (idx >= 0) {
         const t = lastCandles[idx].time;
@@ -1288,13 +1293,16 @@ function initApp() {
 
     const markers = Array.from(grouped.entries())
       .sort((a, b) => a[0] - b[0])
-      .map(([time, cfgs]) => ({
-        time,
-        position: 'belowBar',
-        color: cfgs.at(-1).color,
-        shape: 'arrowUp',
-        text: cfgs.map(c => `${c.period}扣`).join('/')
-      }));
+      .map(([time, cfgs]) => {
+        const has20 = cfgs.some(c => c.period === 20);
+        return {
+          time,
+          position: 'belowBar',
+          color: has20 ? '#ef5350' : cfgs.at(-1).color,
+          shape: 'arrowUp',
+          text: cfgs.map(c => `${c.period}扣`).join('/')
+        };
+      });
 
     deductSeries.setMarkers(markers);
   }
@@ -1326,7 +1334,7 @@ function initApp() {
 
     let bbHtml = '';
     if (ind?.bb && toggleBb.checked) {
-      bbHtml = `  |  <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} 中:${ind.bb.mid} 下:${ind.bb.low}</span>`;
+      bbHtml = `  |  <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} <span style="color:#ef5350">中:${ind.bb.mid}</span> 下:${ind.bb.low}</span>`;
     }
 
     const metricsHtml =
