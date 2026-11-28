@@ -45,6 +45,10 @@ function initApp() {
   const resizerVolSub = document.getElementById('resizer-vol-sub');
   const drawCanvas = document.getElementById('draw-canvas');
   const drawCtx = drawCanvas.getContext('2d');
+  const volCanvas = document.getElementById('vol-canvas');
+  const volCtx = volCanvas.getContext('2d');
+  const subCanvas = document.getElementById('sub-canvas');
+  const subCtx = subCanvas.getContext('2d');
   const ohlcLegend = document.getElementById('ohlc-legend');
   const volLegend = document.getElementById('vol-legend');
   const subLegend = document.getElementById('sub-legend');
@@ -67,9 +71,9 @@ function initApp() {
   let currentSymbol = symbolSelect.value, currentName = '台積電', currentInterval = intervalSelect.value;
   let unsub = null, liveTimer = null, favMap = {}, lastCandles = [], syncingCross = false, indicators = null;
   let subDataMap = new Map();
+  let subLatestLabels = [];
   let keyboardBarIndex = -1;
 
-  // ========== 主附圖分隔線自由拖曳調整大小 ==========
   function setupPaneResizer(resizerEl, topPane, bottomPane) {
     let active = false;
     let startY = 0;
@@ -99,7 +103,7 @@ function initApp() {
 
       topPane.style.flex = `${newTopH} 1 0px`;
       bottomPane.style.flex = `${newBottomH} 1 0px`;
-      requestAnimationFrame(renderDrawings);
+      requestAnimationFrame(renderAllOverlays);
     };
 
     const onEnd = () => {
@@ -108,7 +112,7 @@ function initApp() {
       resizerEl.classList.remove('dragging');
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
-      requestAnimationFrame(renderDrawings);
+      requestAnimationFrame(renderAllOverlays);
     };
 
     resizerEl.addEventListener('mousedown', e => {
@@ -175,19 +179,30 @@ function initApp() {
   }
   window.addEventListener('resize', applyResponsiveChartOpts);
 
+  // 最新價格不顯示在右側座標軸，改顯示在 K 棒上
   const candleSeries = chart.addCandlestickSeries({
-    upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350'
+    upColor: '#26a69a',
+    downColor: '#ef5350',
+    borderVisible: false,
+    wickUpColor: '#26a69a',
+    wickDownColor: '#ef5350',
+    lastValueVisible: false
   });
-  const volumeSeries = volChart.addHistogramSeries({ priceFormat: { type: 'volume' } });
 
-  const kdKSeries = subChart.addLineSeries({ color: '#ffeb3b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
-  const kdDSeries = subChart.addLineSeries({ color: '#00e5ff', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
+  // 附圖最新數值不顯示在右側座標軸，改顯示在曲線/柱狀圖內
+  const volumeSeries = volChart.addHistogramSeries({
+    priceFormat: { type: 'volume' },
+    lastValueVisible: false
+  });
 
-  const bias18Series = subChart.addLineSeries({ color: '#ff9800', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
-  const bias6Series = subChart.addLineSeries({ color: '#69f0ae', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
+  const kdKSeries = subChart.addLineSeries({ color: '#ffeb3b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
+  const kdDSeries = subChart.addLineSeries({ color: '#00e5ff', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
 
-  const macdDifSeries = subChart.addLineSeries({ color: '#ffffff', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
-  const macdDeaSeries = subChart.addLineSeries({ color: '#ffeb3b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
+  const bias18Series = subChart.addLineSeries({ color: '#ff9800', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
+  const bias6Series = subChart.addLineSeries({ color: '#69f0ae', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
+
+  const macdDifSeries = subChart.addLineSeries({ color: '#ffffff', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
+  const macdDeaSeries = subChart.addLineSeries({ color: '#ffeb3b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
   const macdHistSeries = subChart.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false });
 
   const zeroRefSeries = subChart.addLineSeries({
@@ -288,6 +303,7 @@ function initApp() {
 
   function computeSubIndicators(candles, interval) {
     subDataMap = new Map();
+    subLatestLabels = [];
     const isMonth = interval === '1mo';
     const isWeek = interval === '1wk';
     const isDay = interval === '1d';
@@ -319,6 +335,8 @@ function initApp() {
     }
 
     const r2 = n => Number(n.toFixed(2));
+    const lastIdx = candles.length - 1;
+    const lastBar = candles[lastIdx];
 
     if (isMonth) {
       const kData = [], dData = [];
@@ -344,6 +362,13 @@ function initApp() {
       }
       kdKSeries.setData(kData);
       kdDSeries.setData(dData);
+      const latest = subDataMap.get(lastBar.time);
+      if (latest) {
+        subLatestLabels = [
+          { idx: lastIdx, time: lastBar.time, value: latest.k, text: `K:${latest.k}`, color: '#ffeb3b', yOffset: -10 },
+          { idx: lastIdx, time: lastBar.time, value: latest.d, text: `D:${latest.d}`, color: '#00e5ff', yOffset: 10 }
+        ];
+      }
     } else if (isWeek) {
       const closes = candles.map(c => c.close);
       const ma18 = calcSMA(closes, 18);
@@ -363,6 +388,15 @@ function initApp() {
       bias18Series.setData(b18Data);
       bias6Series.setData(b6Data);
       zeroRefSeries.setData(zeroData);
+      const latest = subDataMap.get(lastBar.time);
+      if (latest) {
+        if (latest.bias18 !== null) {
+          subLatestLabels.push({ idx: lastIdx, time: lastBar.time, value: latest.bias18, text: `18:${latest.bias18}%`, color: '#ff9800', yOffset: -10 });
+        }
+        if (latest.bias6 !== null) {
+          subLatestLabels.push({ idx: lastIdx, time: lastBar.time, value: latest.bias6, text: `6:${latest.bias6}%`, color: '#69f0ae', yOffset: 10 });
+        }
+      }
     } else if (isDay) {
       const closes = candles.map(c => c.close);
       const ema12 = calcEMA(closes, 12);
@@ -398,6 +432,15 @@ function initApp() {
       macdDeaSeries.setData(deaData);
       macdHistSeries.setData(histData);
       zeroRefSeries.setData(zeroData);
+      const latest = subDataMap.get(lastBar.time);
+      if (latest) {
+        if (latest.dif !== null) {
+          subLatestLabels.push({ idx: lastIdx, time: lastBar.time, value: latest.dif, text: `DIF:${latest.dif}`, color: '#ffffff', yOffset: -12 });
+        }
+        if (latest.dea !== null) {
+          subLatestLabels.push({ idx: lastIdx, time: lastBar.time, value: latest.dea, text: `MACD:${latest.dea}`, color: '#ffeb3b', yOffset: 10 });
+        }
+      }
     }
 
     if (candles.length) {
@@ -480,19 +523,29 @@ function initApp() {
     return parsed.length ? parsed : [0.333, 0.5, 0.6667];
   }
 
-  function resizeCanvas() {
-    const rect = chartContainer.getBoundingClientRect();
+  function syncCanvasSize(canvasEl, ctx, containerEl) {
+    const rect = containerEl.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     const w = Math.max(1, Math.floor(rect.width));
     const h = Math.max(1, Math.floor(rect.height));
-    if (drawCanvas.width !== w * dpr || drawCanvas.height !== h * dpr) {
-      drawCanvas.width = w * dpr;
-      drawCanvas.height = h * dpr;
+    if (canvasEl.width !== w * dpr || canvasEl.height !== h * dpr) {
+      canvasEl.width = w * dpr;
+      canvasEl.height = h * dpr;
     }
-    drawCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    renderDrawings();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
-  new ResizeObserver(resizeCanvas).observe(chartContainer);
+
+  function resizeAllCanvases() {
+    syncCanvasSize(drawCanvas, drawCtx, chartContainer);
+    syncCanvasSize(volCanvas, volCtx, volumeContainer);
+    if (subIndicatorContainer.style.display !== 'none') {
+      syncCanvasSize(subCanvas, subCtx, subIndicatorContainer);
+    }
+    renderAllOverlays();
+  }
+  new ResizeObserver(resizeAllCanvases).observe(chartContainer);
+  new ResizeObserver(resizeAllCanvases).observe(volumeContainer);
+  new ResizeObserver(resizeAllCanvases).observe(subIndicatorContainer);
 
   function logicalToTime(logical) {
     if (!lastCandles.length || logical == null) return null;
@@ -622,19 +675,21 @@ function initApp() {
     return a && b && a.kind === b.kind && a.index === b.index;
   }
 
-  function drawTag(text, x, y, color, align = 'left') {
-    drawCtx.font = isMobile() ? 'bold 10px sans-serif' : 'bold 11px sans-serif';
+  function drawBadgeOnCtx(ctx, text, x, y, color, align = 'left', bg = 'rgba(19, 23, 34, 0.9)') {
+    ctx.save();
+    ctx.font = isMobile() ? 'bold 10px sans-serif' : 'bold 11px sans-serif';
     const padX = 5, h = 15;
-    const w = drawCtx.measureText(text).width + padX * 2;
-    const drawX = align === 'right' ? x - w : x;
-    drawCtx.fillStyle = 'rgba(19, 23, 34, 0.88)';
-    drawCtx.fillRect(drawX, y - h / 2, w, h);
-    drawCtx.strokeStyle = color;
-    drawCtx.lineWidth = 1;
-    drawCtx.strokeRect(drawX, y - h / 2, w, h);
-    drawCtx.fillStyle = color;
-    drawCtx.textBaseline = 'middle';
-    drawCtx.fillText(text, drawX + padX, y);
+    const w = ctx.measureText(text).width + padX * 2;
+    const drawX = align === 'right' ? x - w : (align === 'center' ? x - w / 2 : x);
+    ctx.fillStyle = bg;
+    ctx.fillRect(drawX, y - h / 2, w, h);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(drawX, y - h / 2, w, h);
+    ctx.fillStyle = color;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, drawX + padX, y);
+    ctx.restore();
   }
 
   function drawHandle(pt, color) {
@@ -677,7 +732,7 @@ function initApp() {
         drawCtx.setLineDash([]);
         drawCtx.shadowBlur = 0;
         const label = shape.p1.time ? fmtTime(shape.p1.time) : `idx:${Math.round(shape.p1.logical)}`;
-        drawTag(label, p1.x + 4, h - 18, color, 'left');
+        drawBadgeOnCtx(drawCtx, label, p1.x + 4, h - 18, color, 'left');
         if (isHighlighted) drawHandle({ x: p1.x, y: h / 2 }, color);
       }
     } else if (shape.type === 'trend' || shape.type === 'ray') {
@@ -708,8 +763,8 @@ function initApp() {
             drawCtx.stroke();
           }
         });
-        drawTag(`${shape.p1.price}`, p1.x + 6, p1.y - 10, color);
-        drawTag(`${shape.p2.price}`, p2.x + 6, p2.y - 10, color);
+        drawBadgeOnCtx(drawCtx, `${shape.p1.price}`, p1.x + 6, p1.y - 10, color);
+        drawBadgeOnCtx(drawCtx, `${shape.p2.price}`, p2.x + 6, p2.y - 10, color);
       }
     } else if (shape.type === 'ellipse') {
       const p1 = pointToPixel(shape.p1);
@@ -745,8 +800,8 @@ function initApp() {
 
         drawCtx.setLineDash([]);
         drawCtx.shadowBlur = 0;
-        drawTag(`起 ${shape.p1.price}`, left + 4, p1.y - 9, color);
-        drawTag(`終 ${shape.p2.price}`, left + 4, p2.y + 9, color);
+        drawBadgeOnCtx(drawCtx, `起 ${shape.p1.price}`, left + 4, p1.y - 9, color);
+        drawBadgeOnCtx(drawCtx, `終 ${shape.p2.price}`, left + 4, p2.y + 9, color);
 
         const ratios = Array.isArray(shape.ratios) && shape.ratios.length ? shape.ratios : getRatios();
         const diff = shape.p2.price - shape.p1.price;
@@ -764,7 +819,7 @@ function initApp() {
             drawCtx.stroke();
             drawCtx.restore();
 
-            drawTag(`${r}x : ${targetPrice}`, right - 4, py, color, 'right');
+            drawBadgeOnCtx(drawCtx, `${r}x : ${targetPrice}`, right - 4, py, color, 'right');
           }
         });
         if (isHighlighted) {
@@ -776,10 +831,137 @@ function initApp() {
     drawCtx.restore();
   }
 
+  // 在 K 棒上繪製：最高價、最低價、最新價格（不放右側座標軸）
+  function drawCandlePriceMarkers() {
+    if (!lastCandles.length) return;
+    const plotW = chartContainer.clientWidth - getPriceScaleWidth();
+    const plotH = chartContainer.clientHeight;
+    const ts = chart.timeScale();
+    const range = ts.getVisibleLogicalRange();
+
+    let startIdx = 0;
+    let endIdx = lastCandles.length - 1;
+    if (range) {
+      startIdx = Math.max(0, Math.floor(range.from));
+      endIdx = Math.min(lastCandles.length - 1, Math.ceil(range.to));
+    }
+
+    let maxBar = null, maxIdx = -1;
+    let minBar = null, minIdx = -1;
+
+    for (let i = startIdx; i <= endIdx; i++) {
+      const b = lastCandles[i];
+      if (!b) continue;
+      if (!maxBar || b.high > maxBar.high) {
+        maxBar = b;
+        maxIdx = i;
+      }
+      if (!minBar || b.low < minBar.low) {
+        minBar = b;
+        minIdx = i;
+      }
+    }
+
+    drawCtx.save();
+    drawCtx.beginPath();
+    drawCtx.rect(0, 0, Math.max(0, plotW), plotH);
+    drawCtx.clip();
+
+    if (maxBar && maxIdx >= 0) {
+      const hx = ts.logicalToCoordinate(maxIdx);
+      const hy = candleSeries.priceToCoordinate(maxBar.high);
+      if (hx !== null && hy !== null) {
+        drawBadgeOnCtx(drawCtx, `▲ ${maxBar.high}`, hx, Math.max(14, hy - 12), '#ef5350', 'center');
+      }
+    }
+
+    if (minBar && minIdx >= 0) {
+      const lx = ts.logicalToCoordinate(minIdx);
+      const ly = candleSeries.priceToCoordinate(minBar.low);
+      if (lx !== null && ly !== null) {
+        drawBadgeOnCtx(drawCtx, `▼ ${minBar.low}`, lx, Math.min(plotH - 12, ly + 12), '#26a69a', 'center');
+      }
+    }
+
+    const lastIdx = lastCandles.length - 1;
+    const lastBar = lastCandles[lastIdx];
+    const cx = ts.logicalToCoordinate(lastIdx);
+    const cy = candleSeries.priceToCoordinate(lastBar.close);
+    if (cx !== null && cy !== null) {
+      const clr = lastBar.close >= lastBar.open ? '#26a69a' : '#ef5350';
+      drawCtx.beginPath();
+      drawCtx.arc(cx, cy, 4, 0, Math.PI * 2);
+      drawCtx.fillStyle = clr;
+      drawCtx.fill();
+      const align = cx > plotW - 85 ? 'right' : 'left';
+      const offsetX = align === 'right' ? -7 : 7;
+      drawBadgeOnCtx(drawCtx, `今 ${lastBar.close}`, cx + offsetX, cy, clr, align);
+    }
+
+    drawCtx.restore();
+  }
+
+  // 在成交量圖與技術指標附圖的曲線/柱狀圖內標示最新數值（不放右側座標軸）
+  function drawSubChartsLatestValues() {
+    const volW = volumeContainer.clientWidth - getPriceScaleWidth();
+    const volH = volumeContainer.clientHeight;
+    volCtx.clearRect(0, 0, volumeContainer.clientWidth, volH);
+
+    if (lastCandles.length) {
+      const lastIdx = lastCandles.length - 1;
+      const lastBar = lastCandles[lastIdx];
+      const vx = volChart.timeScale().logicalToCoordinate(lastIdx);
+      const vy = volumeSeries.priceToCoordinate(lastBar.volume);
+      if (vx !== null && vy !== null) {
+        volCtx.save();
+        volCtx.beginPath();
+        volCtx.rect(0, 0, Math.max(0, volW), volH);
+        volCtx.clip();
+        const clr = lastBar.close >= lastBar.open ? '#26a69a' : '#ef5350';
+        const align = vx > volW - 95 ? 'right' : 'left';
+        const offsetX = align === 'right' ? -6 : 6;
+        drawBadgeOnCtx(volCtx, fmtVol(lastBar.volume), vx + offsetX, Math.max(14, Math.min(volH - 10, vy)), clr, align);
+        volCtx.restore();
+      }
+    }
+
+    const subW = subIndicatorContainer.clientWidth - getPriceScaleWidth();
+    const subH = subIndicatorContainer.clientHeight;
+    subCtx.clearRect(0, 0, subIndicatorContainer.clientWidth, subH);
+
+    if (subIndicatorContainer.style.display !== 'none' && subLatestLabels.length) {
+      const anchorSeries = currentInterval === '1mo' ? kdKSeries : (currentInterval === '1wk' ? bias6Series : macdDifSeries);
+      subCtx.save();
+      subCtx.beginPath();
+      subCtx.rect(0, 0, Math.max(0, subW), subH);
+      subCtx.clip();
+
+      subLatestLabels.forEach(item => {
+        const sx = subChart.timeScale().logicalToCoordinate(item.idx);
+        const sy = anchorSeries.priceToCoordinate(item.value);
+        if (sx !== null && sy !== null) {
+          subCtx.beginPath();
+          subCtx.arc(sx, sy, 3.5, 0, Math.PI * 2);
+          subCtx.fillStyle = item.color;
+          subCtx.fill();
+
+          const align = sx > subW - 90 ? 'right' : 'left';
+          const offsetX = align === 'right' ? -6 : 6;
+          const drawY = Math.max(14, Math.min(subH - 10, sy + (item.yOffset || 0)));
+          drawBadgeOnCtx(subCtx, item.text, sx + offsetX, drawY, item.color, align);
+        }
+      });
+
+      subCtx.restore();
+    }
+  }
+
   function renderDrawings() {
     const w = chartContainer.clientWidth;
     const h = chartContainer.clientHeight;
     drawCtx.clearRect(0, 0, w, h);
+
+    drawCandlePriceMarkers();
 
     cloudShapes.forEach((s, idx) => {
       const target = { kind: 'shape', index: idx };
@@ -799,6 +981,11 @@ function initApp() {
         }, true, false);
       }
     }
+  }
+
+  function renderAllOverlays() {
+    renderDrawings();
+    drawSubChartsLatestValues();
   }
 
   function syncPriceLinesStyle() {
@@ -1038,19 +1225,19 @@ function initApp() {
     if (!r) return;
     volChart.timeScale().setVisibleLogicalRange(r);
     if (subIndicatorContainer.style.display !== 'none') subChart.timeScale().setVisibleLogicalRange(r);
-    renderDrawings();
+    renderAllOverlays();
   });
   volChart.timeScale().subscribeVisibleLogicalRangeChange(r => {
     if (!r) return;
     chart.timeScale().setVisibleLogicalRange(r);
     if (subIndicatorContainer.style.display !== 'none') subChart.timeScale().setVisibleLogicalRange(r);
-    renderDrawings();
+    renderAllOverlays();
   });
   subChart.timeScale().subscribeVisibleLogicalRangeChange(r => {
     if (!r) return;
     chart.timeScale().setVisibleLogicalRange(r);
     volChart.timeScale().setVisibleLogicalRange(r);
-    renderDrawings();
+    renderAllOverlays();
   });
 
   const fmtTime = t => {
@@ -1172,7 +1359,7 @@ function initApp() {
         subChart.timeScale().fitContent();
       }
     }
-    requestAnimationFrame(renderDrawings);
+    requestAnimationFrame(renderAllOverlays);
   }
 
   chart.subscribeCrosshairMove(p => {
@@ -1540,8 +1727,8 @@ function initApp() {
     }
   });
 
-  chartContainer.addEventListener('wheel', () => requestAnimationFrame(renderDrawings), { passive: true });
-  chartContainer.addEventListener('pointermove', () => { if (cloudShapes.length || pendingPoint) requestAnimationFrame(renderDrawings); });
+  chartContainer.addEventListener('wheel', () => requestAnimationFrame(renderAllOverlays), { passive: true });
+  chartContainer.addEventListener('pointermove', () => { if (cloudShapes.length || pendingPoint || lastCandles.length) requestAnimationFrame(renderAllOverlays); });
 
   [toggleMa, toggleBb, toggleDeduct].forEach(el => {
     el.onchange = () => {
