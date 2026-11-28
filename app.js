@@ -174,7 +174,6 @@ function initApp() {
   }
   window.addEventListener('resize', applyResponsiveChartOpts);
 
-  // 最新價格不顯示在右側座標軸，改顯示在 K 棒上
   const candleSeries = chart.addCandlestickSeries({
     upColor: '#26a69a',
     downColor: '#ef5350',
@@ -184,7 +183,6 @@ function initApp() {
     lastValueVisible: false
   });
 
-  // 附圖不顯示最新數據（座標軸與曲線內皆不顯示）
   const volumeSeries = volChart.addHistogramSeries({
     priceFormat: { type: 'volume' },
     lastValueVisible: false
@@ -267,6 +265,62 @@ function initApp() {
       crosshairMarkerVisible: false
     });
   });
+
+  // 逐根 K 棒額外計算指標
+  function calcCandleMetrics(bar) {
+    const o = Number(bar.open);
+    const h = Number(bar.high);
+    const l = Number(bar.low);
+    const c = Number(bar.close);
+    const fmtNum = n => Number(n.toFixed(2));
+    const fmtPct = n => `${Number((n * 100).toFixed(2))}%`;
+
+    // 1. 實體K百分比: (收-開)/開
+    const bodyPct = o !== 0 ? fmtPct((c - o) / o) : 'X';
+
+    // 2. 影線百分比:
+    //    收-開>0 ((高-收)+(開-低))/(高-低)
+    //    收-開<0 ((高-開)+(收-低))/(高-低)
+    //    收-開=0 X
+    let shadowPct = 'X';
+    const diffCO = c - o;
+    const rangeHL = h - l;
+    if (diffCO > 0 && rangeHL !== 0) {
+      shadowPct = fmtPct(((h - c) + (o - l)) / rangeHL);
+    } else if (diffCO < 0 && rangeHL !== 0) {
+      shadowPct = fmtPct(((h - o) + (c - l)) / rangeHL);
+    }
+
+    // 3. 高低差百分比: (高-低)/開
+    const rangePct = o !== 0 ? fmtPct((h - l) / o) : 'X';
+
+    // 4. 上下影線百分比:
+    //    收-開>0 且 (高-收)>(開-低) 則 (高-收)/(開-低)
+    //    收-開>0 且 (高-收)=<(開-低) 則 (開-低)/(高-收)
+    //    收-開=<0 且 (高-開)>(收-低) 則 (高-開)/(收-低)
+    //    收-開=<0 且 (高-開)=<(收-低) 則 (收-低)/(高-開)
+    //    若分母為0顯示X
+    let upperLowerShadowRatio = 'X';
+    if (diffCO > 0) {
+      const a = h - c;
+      const b = o - l;
+      if (a > b) {
+        upperLowerShadowRatio = b !== 0 ? `${fmtNum(a / b)}` : 'X';
+      } else {
+        upperLowerShadowRatio = a !== 0 ? `${fmtNum(b / a)}` : 'X';
+      }
+    } else {
+      const a = h - o;
+      const b = c - l;
+      if (a > b) {
+        upperLowerShadowRatio = b !== 0 ? `${fmtNum(a / b)}` : 'X';
+      } else {
+        upperLowerShadowRatio = a !== 0 ? `${fmtNum(b / a)}` : 'X';
+      }
+    }
+
+    return { bodyPct, shadowPct, rangePct, upperLowerShadowRatio };
+  }
 
   function calcEMA(values, period) {
     const k = 2 / (period + 1);
@@ -1192,6 +1246,7 @@ function initApp() {
     if (!bar) return;
     const clr = bar.close >= bar.open ? '#26a69a' : '#ef5350';
     const ind = indicators?.byTime?.get(bar.time);
+    const m = calcCandleMetrics(bar);
 
     let maHtml = '';
     if (ind && toggleMa.checked) {
@@ -1206,11 +1261,18 @@ function initApp() {
       bbHtml = `  |  <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} 中:${ind.bb.mid} 下:${ind.bb.low}</span>`;
     }
 
+    const metricsHtml =
+      `<br/>` +
+      `<span style="color:#ffd54f">實體K%:${m.bodyPct}</span>  ` +
+      `<span style="color:#81d4fa">影線%:${m.shadowPct}</span>  ` +
+      `<span style="color:#ce93d8">高低差%:${m.rangePct}</span>  ` +
+      `<span style="color:#a5d6a7">上下影線比:${m.upperLowerShadowRatio}</span>`;
+
     ohlcLegend.innerHTML =
       `<strong style="color:#fff">${currentName} (${currentSymbol})</strong>  時間: ${fmtTime(bar.time)}  ` +
       `開:<span style="color:${clr}">${bar.open}</span>  高:<span style="color:${clr}">${bar.high}</span>  ` +
       `低:<span style="color:${clr}">${bar.low}</span>  收:<span style="color:${clr}">${bar.close}</span>` +
-      maHtml + bbHtml;
+      metricsHtml + maHtml + bbHtml;
 
     let volMaHtml = '';
     if (ind && toggleMa.checked) {
