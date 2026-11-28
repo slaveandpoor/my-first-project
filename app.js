@@ -38,10 +38,14 @@ function initApp() {
     appId: "1:465125050422:web:4c2b050ab549c675767097"
   });
   const db = firebase.firestore();
-  const chartContainer = document.getElementById('chart-container'), volumeContainer = document.getElementById('volume-container');
+  const chartContainer = document.getElementById('chart-container');
+  const volumeContainer = document.getElementById('volume-container');
+  const subIndicatorContainer = document.getElementById('sub-indicator-container');
   const drawCanvas = document.getElementById('draw-canvas');
   const drawCtx = drawCanvas.getContext('2d');
-  const ohlcLegend = document.getElementById('ohlc-legend'), volLegend = document.getElementById('vol-legend');
+  const ohlcLegend = document.getElementById('ohlc-legend');
+  const volLegend = document.getElementById('vol-legend');
+  const subLegend = document.getElementById('sub-legend');
   const symbolSelect = document.getElementById('symbol-select'), favGroup = document.getElementById('fav-group');
   const intervalSelect = document.getElementById('interval-select'), customInput = document.getElementById('custom-symbol'), searchBtn = document.getElementById('search-btn');
   const favBtn = document.getElementById('fav-btn'), colorSelect = document.getElementById('color-select'), customColorInput = document.getElementById('custom-color');
@@ -60,6 +64,7 @@ function initApp() {
   let suppressNextClick = false;
   let currentSymbol = symbolSelect.value, currentName = '台積電', currentInterval = intervalSelect.value;
   let unsub = null, liveTimer = null, favMap = {}, lastCandles = [], syncingCross = false, indicators = null;
+  let subDataMap = new Map();
   let keyboardBarIndex = -1;
 
   const isMobile = () => window.innerWidth <= 768;
@@ -81,18 +86,23 @@ function initApp() {
     },
     timeScale: { visible: false }
   });
-  const volChart = LightweightCharts.createChart(volumeContainer, { ...baseOpts, timeScale: { borderColor: '#2a2e39', timeVisible: true } });
+  const volChart = LightweightCharts.createChart(volumeContainer, {
+    ...baseOpts,
+    timeScale: { visible: false }
+  });
+  const subChart = LightweightCharts.createChart(subIndicatorContainer, {
+    ...baseOpts,
+    timeScale: { borderColor: '#2a2e39', timeVisible: true }
+  });
 
   function applyResponsiveChartOpts() {
     const mw = getPriceScaleWidth();
     const fs = isMobile() ? 10 : 12;
-    chart.applyOptions({
-      layout: { fontSize: fs },
-      rightPriceScale: { minimumWidth: mw }
-    });
-    volChart.applyOptions({
-      layout: { fontSize: fs },
-      rightPriceScale: { minimumWidth: mw }
+    [chart, volChart, subChart].forEach(c => {
+      c.applyOptions({
+        layout: { fontSize: fs },
+        rightPriceScale: { minimumWidth: mw }
+      });
     });
   }
   window.addEventListener('resize', applyResponsiveChartOpts);
@@ -101,6 +111,26 @@ function initApp() {
     upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350'
   });
   const volumeSeries = volChart.addHistogramSeries({ priceFormat: { type: 'volume' } });
+
+  // 附圖 Series：月線 KD(9,3,3) / 週線 18-6 乖離 / 日線 MACD(12,26,9)
+  const kdKSeries = subChart.addLineSeries({ color: '#ffeb3b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
+  const kdDSeries = subChart.addLineSeries({ color: '#00e5ff', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
+
+  const bias18Series = subChart.addLineSeries({ color: '#ff9800', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
+  const bias6Series = subChart.addLineSeries({ color: '#69f0ae', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
+
+  const macdDifSeries = subChart.addLineSeries({ color: '#ffffff', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
+  const macdDeaSeries = subChart.addLineSeries({ color: '#ffeb3b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
+  const macdHistSeries = subChart.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false });
+
+  const zeroRefSeries = subChart.addLineSeries({
+    color: 'rgba(149, 152, 161, 0.45)',
+    lineWidth: 1,
+    lineStyle: LightweightCharts.LineStyle.Dashed,
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: false
+  });
 
   const deductSeries = chart.addLineSeries({
     priceScaleId: 'deduct-scale',
@@ -161,6 +191,181 @@ function initApp() {
     });
   });
 
+  // ========== 附圖指標計算（月線KD / 週線18-6乖離 / 日線MACD） ==========
+  function calcEMA(values, period) {
+    const k = 2 / (period + 1);
+    const out = new Array(values.length).fill(null);
+    let ema = null;
+    for (let i = 0; i < values.length; i++) {
+      const v = values[i];
+      if (v == null || Number.isNaN(v)) continue;
+      if (ema === null) {
+        ema = v;
+      } else {
+        ema = v * k + ema * (1 - k);
+      }
+      out[i] = ema;
+    }
+    return out;
+  }
+
+  function calcSMA(values, period) {
+    const out = new Array(values.length).fill(null);
+    let sum = 0;
+    for (let i = 0; i < values.length; i++) {
+      sum += values[i];
+      if (i >= period) sum -= values[i - period];
+      if (i >= period - 1) out[i] = sum / period;
+    }
+    return out;
+  }
+
+  function computeSubIndicators(candles, interval) {
+    subDataMap = new Map();
+    const isMonth = interval === '1mo';
+    const isWeek = interval === '1wk';
+    const isDay = interval === '1d';
+
+    kdKSeries.setData([]);
+    kdDSeries.setData([]);
+    bias18Series.setData([]);
+    bias6Series.setData([]);
+    macdDifSeries.setData([]);
+    macdDeaSeries.setData([]);
+    macdHistSeries.setData([]);
+    zeroRefSeries.setData([]);
+
+    if (!isMonth && !isWeek && !isDay) {
+      subIndicatorContainer.style.display = 'none';
+      volChart.applyOptions({ timeScale: { visible: true, borderColor: '#2a2e39', timeVisible: true } });
+      return;
+    }
+
+    subIndicatorContainer.style.display = 'block';
+    volChart.applyOptions({ timeScale: { visible: false } });
+    subChart.applyOptions({ timeScale: { visible: true, borderColor: '#2a2e39', timeVisible: true } });
+
+    if (!candles.length) {
+      subLegend.textContent = '附圖指標：無資料';
+      return;
+    }
+
+    const r2 = n => Number(n.toFixed(2));
+
+    if (isMonth) {
+      // KD(9, 3, 3) -> RSV 9日/月，K與D皆以 1/3 權重平滑（Kt=3, Dt=3）
+      const kData = [], dData = [];
+      let prevK = 50, prevD = 50;
+      for (let i = 0; i < candles.length; i++) {
+        const start = Math.max(0, i - 8);
+        let lowMin = Infinity, highMax = -Infinity;
+        for (let j = start; j <= i; j++) {
+          if (candles[j].low < lowMin) lowMin = candles[j].low;
+          if (candles[j].high > highMax) highMax = candles[j].high;
+        }
+        const range = highMax - lowMin;
+        const rsv = range === 0 ? 50 : ((candles[i].close - lowMin) / range) * 100;
+        const kVal = (2 / 3) * prevK + (1 / 3) * rsv;
+        const dVal = (2 / 3) * prevD + (1 / 3) * kVal;
+        prevK = kVal;
+        prevD = dVal;
+
+        const t = candles[i].time;
+        kData.push({ time: t, value: r2(kVal) });
+        dData.push({ time: t, value: r2(dVal) });
+        subDataMap.set(t, { mode: 'kd', k: r2(kVal), d: r2(dVal), anchor: r2(kVal) });
+      }
+      kdKSeries.setData(kData);
+      kdDSeries.setData(dData);
+    } else if (isWeek) {
+      // 18-6 乖離（天數1: 18, 天數2: 6）
+      const closes = candles.map(c => c.close);
+      const ma18 = calcSMA(closes, 18);
+      const ma6 = calcSMA(closes, 6);
+      const b18Data = [], b6Data = [], zeroData = [];
+
+      for (let i = 0; i < candles.length; i++) {
+        const t = candles[i].time;
+        const c = closes[i];
+        const v18 = ma18[i] ? r2(((c - ma18[i]) / ma18[i]) * 100) : null;
+        const v6 = ma6[i] ? r2(((c - ma6[i]) / ma6[i]) * 100) : null;
+        if (v18 !== null) b18Data.push({ time: t, value: v18 });
+        if (v6 !== null) b6Data.push({ time: t, value: v6 });
+        zeroData.push({ time: t, value: 0 });
+        subDataMap.set(t, { mode: 'bias', bias18: v18, bias6: v6, anchor: v6 ?? v18 ?? 0 });
+      }
+      bias18Series.setData(b18Data);
+      bias6Series.setData(b6Data);
+      zeroRefSeries.setData(zeroData);
+    } else if (isDay) {
+      // MACD(12, 26, 9)
+      const closes = candles.map(c => c.close);
+      const ema12 = calcEMA(closes, 12);
+      const ema26 = calcEMA(closes, 26);
+      const difArr = closes.map((_, i) => (ema12[i] !== null && ema26[i] !== null) ? ema12[i] - ema26[i] : null);
+      const deaArr = calcEMA(difArr, 9);
+
+      const difData = [], deaData = [], histData = [], zeroData = [];
+      for (let i = 0; i < candles.length; i++) {
+        const t = candles[i].time;
+        const dif = difArr[i];
+        const dea = deaArr[i];
+        const osc = (dif !== null && dea !== null) ? (dif - dea) : null;
+        if (dif !== null) difData.push({ time: t, value: r2(dif) });
+        if (dea !== null) deaData.push({ time: t, value: r2(dea) });
+        if (osc !== null) {
+          histData.push({
+            time: t,
+            value: r2(osc),
+            color: osc >= 0 ? 'rgba(38, 166, 154, 0.75)' : 'rgba(239, 83, 80, 0.75)'
+          });
+        }
+        zeroData.push({ time: t, value: 0 });
+        subDataMap.set(t, {
+          mode: 'macd',
+          dif: dif !== null ? r2(dif) : null,
+          dea: dea !== null ? r2(dea) : null,
+          osc: osc !== null ? r2(osc) : null,
+          anchor: dif !== null ? r2(dif) : 0
+        });
+      }
+      macdDifSeries.setData(difData);
+      macdDeaSeries.setData(deaData);
+      macdHistSeries.setData(histData);
+      zeroRefSeries.setData(zeroData);
+    }
+
+    if (candles.length) {
+      updateSubLegend(candles.at(-1).time);
+    }
+  }
+
+  function updateSubLegend(time) {
+    const info = subDataMap.get(time);
+    if (!info) {
+      subLegend.textContent = '附圖指標';
+      return;
+    }
+    if (info.mode === 'kd') {
+      subLegend.innerHTML =
+        `<strong style="color:#fff">KD(9,3,3)</strong>  ` +
+        `<span style="color:#ffeb3b">K:${info.k}</span>  ` +
+        `<span style="color:#00e5ff">D:${info.d}</span>`;
+    } else if (info.mode === 'bias') {
+      subLegend.innerHTML =
+        `<strong style="color:#fff">18-6乖離(18,6)</strong>  ` +
+        `<span style="color:#ff9800">乖離18:${info.bias18 !== null ? info.bias18 + '%' : '--'}</span>  ` +
+        `<span style="color:#69f0ae">乖離6:${info.bias6 !== null ? info.bias6 + '%' : '--'}</span>`;
+    } else if (info.mode === 'macd') {
+      const oscColor = (info.osc ?? 0) >= 0 ? '#26a69a' : '#ef5350';
+      subLegend.innerHTML =
+        `<strong style="color:#fff">MACD(12,26,9)</strong>  ` +
+        `<span style="color:#ffffff">DIF:${info.dif ?? '--'}</span>  ` +
+        `<span style="color:#ffeb3b">MACD:${info.dea ?? '--'}</span>  ` +
+        `<span style="color:${oscColor}">OSC:${info.osc ?? '--'}</span>`;
+    }
+  }
+
   // ========== 鍵盤方向鍵移動至各根K棒收盤價 ==========
   function moveCrosshairToBarClose(idx) {
     if (!lastCandles.length) return;
@@ -168,7 +373,6 @@ function initApp() {
     keyboardBarIndex = clamped;
     const bar = lastCandles[clamped];
 
-    // 確保目標 K 棒在可視時間範圍內
     const logicalRange = chart.timeScale().getVisibleLogicalRange();
     if (logicalRange) {
       if (clamped < logicalRange.from + 1) {
@@ -185,9 +389,15 @@ function initApp() {
     syncingCross = true;
     chart.setCrosshairPosition(bar.close, bar.time, candleSeries);
     volChart.setCrosshairPosition(bar.volume, bar.time, volumeSeries);
+    if (subIndicatorContainer.style.display !== 'none') {
+      const subInfo = subDataMap.get(bar.time);
+      const anchorSeries = currentInterval === '1mo' ? kdKSeries : (currentInterval === '1wk' ? bias6Series : macdDifSeries);
+      subChart.setCrosshairPosition(subInfo ? subInfo.anchor : 0, bar.time, anchorSeries);
+    }
     syncingCross = false;
 
     updateLegends(bar);
+    updateSubLegend(bar.time);
     if (isDrawMode && pendingPoint) {
       hoverPoint = { logical: clamped, time: bar.time, price: bar.close };
       renderDrawings();
@@ -638,8 +848,7 @@ function initApp() {
       moved: false
     };
 
-    chart.applyOptions({ handleScroll: false, handleScale: false });
-    volChart.applyOptions({ handleScroll: false, handleScale: false });
+    [chart, volChart, subChart].forEach(c => c.applyOptions({ handleScroll: false, handleScale: false }));
     e.preventDefault();
   });
 
@@ -657,8 +866,7 @@ function initApp() {
     const wasMoved = dragState.moved;
     dragState = null;
 
-    chart.applyOptions({ handleScroll: true, handleScale: true });
-    volChart.applyOptions({ handleScroll: true, handleScale: true });
+    [chart, volChart, subChart].forEach(c => c.applyOptions({ handleScroll: true, handleScale: true }));
 
     if (wasMoved) {
       suppressNextClick = true;
@@ -762,12 +970,33 @@ function initApp() {
     }, { merge: true });
   };
 
+  function syncAllLogicalRanges(r) {
+    if (!r || syncingCross) return;
+    syncingCross = true;
+    volChart.timeScale().setVisibleLogicalRange(r);
+    if (subIndicatorContainer.style.display !== 'none') {
+      subChart.timeScale().setVisibleLogicalRange(r);
+    }
+    syncingCross = false;
+    renderDrawings();
+  }
+
   chart.timeScale().subscribeVisibleLogicalRangeChange(r => {
-    if (r) volChart.timeScale().setVisibleLogicalRange(r);
+    if (!r) return;
+    volChart.timeScale().setVisibleLogicalRange(r);
+    if (subIndicatorContainer.style.display !== 'none') subChart.timeScale().setVisibleLogicalRange(r);
     renderDrawings();
   });
   volChart.timeScale().subscribeVisibleLogicalRangeChange(r => {
-    if (r) chart.timeScale().setVisibleLogicalRange(r);
+    if (!r) return;
+    chart.timeScale().setVisibleLogicalRange(r);
+    if (subIndicatorContainer.style.display !== 'none') subChart.timeScale().setVisibleLogicalRange(r);
+    renderDrawings();
+  });
+  subChart.timeScale().subscribeVisibleLogicalRangeChange(r => {
+    if (!r) return;
+    chart.timeScale().setVisibleLogicalRange(r);
+    volChart.timeScale().setVisibleLogicalRange(r);
     renderDrawings();
   });
 
@@ -875,14 +1104,20 @@ function initApp() {
     bbMidSeries.setData(indicators.bbMid);
     bbLowerSeries.setData(indicators.bbLower);
 
+    computeSubIndicators(candles, currentInterval);
     applyVisibility();
+
     if (candles.length) {
       keyboardBarIndex = candles.length - 1;
       updateLegends(candles.at(-1));
+      updateSubLegend(candles.at(-1).time);
     }
     if (fitView) {
       chart.timeScale().fitContent();
       volChart.timeScale().fitContent();
+      if (subIndicatorContainer.style.display !== 'none') {
+        subChart.timeScale().fitContent();
+      }
     }
     requestAnimationFrame(renderDrawings);
   }
@@ -916,10 +1151,20 @@ function initApp() {
     const bar = p.time ? lastCandles.find(c => c.time === p.time) : null;
     if (bar) {
       updateLegends(bar);
+      updateSubLegend(bar.time);
       volChart.setCrosshairPosition(bar.volume, p.time, volumeSeries);
+      if (subIndicatorContainer.style.display !== 'none') {
+        const subInfo = subDataMap.get(bar.time);
+        const anchorSeries = currentInterval === '1mo' ? kdKSeries : (currentInterval === '1wk' ? bias6Series : macdDifSeries);
+        subChart.setCrosshairPosition(subInfo ? subInfo.anchor : 0, p.time, anchorSeries);
+      }
     } else {
       volChart.clearCrosshairPosition();
-      if (lastCandles.length) updateLegends(lastCandles.at(-1));
+      subChart.clearCrosshairPosition();
+      if (lastCandles.length) {
+        updateLegends(lastCandles.at(-1));
+        updateSubLegend(lastCandles.at(-1).time);
+      }
     }
     syncingCross = false;
   });
@@ -934,10 +1179,38 @@ function initApp() {
     const bar = p.time ? lastCandles.find(c => c.time === p.time) : null;
     if (bar) {
       updateLegends(bar);
+      updateSubLegend(bar.time);
       chart.setCrosshairPosition(bar.close, p.time, candleSeries);
     } else {
       chart.clearCrosshairPosition();
-      if (lastCandles.length) updateLegends(lastCandles.at(-1));
+      if (lastCandles.length) {
+        updateLegends(lastCandles.at(-1));
+        updateSubLegend(lastCandles.at(-1).time);
+      }
+    }
+    syncingCross = false;
+  });
+
+  subChart.subscribeCrosshairMove(p => {
+    if (p.time && lastCandles.length) {
+      const idx = lastCandles.findIndex(c => c.time === p.time);
+      if (idx !== -1) keyboardBarIndex = idx;
+    }
+    if (syncingCross) return;
+    syncingCross = true;
+    const bar = p.time ? lastCandles.find(c => c.time === p.time) : null;
+    if (bar) {
+      updateLegends(bar);
+      updateSubLegend(bar.time);
+      chart.setCrosshairPosition(bar.close, p.time, candleSeries);
+      volChart.setCrosshairPosition(bar.volume, p.time, volumeSeries);
+    } else {
+      chart.clearCrosshairPosition();
+      volChart.clearCrosshairPosition();
+      if (lastCandles.length) {
+        updateLegends(lastCandles.at(-1));
+        updateSubLegend(lastCandles.at(-1).time);
+      }
     }
     syncingCross = false;
   });
