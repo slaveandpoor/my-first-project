@@ -12,7 +12,7 @@
     h1 { font-size: 14px; color: #fff; white-space: nowrap; }
     #status-badge { font-size: 12px; padding: 3px 8px; border-radius: 4px; background: #2a2e39; color: #4caf50; max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     select, input, button { background: #2a2e39; color: #d1d4dc; border: 1px solid #363a45; padding: 3px 6px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
-    select#symbol-select { max-width: 185px; }
+    select#symbol-select { max-width: 175px; }
     select#line-width-select { width: 72px; }
     input#custom-symbol { width: 105px; }
     input#rect-ratios { width: 110px; font-size: 11px; }
@@ -105,7 +105,7 @@
     }
     #watchlist-modal-backdrop.open { display: flex; }
     #watchlist-modal {
-      width: 720px;
+      width: 680px;
       max-width: 100%;
       max-height: 88dvh;
       background: #1e222d;
@@ -321,8 +321,51 @@
   <header>
     <div class="group">
       <h1>📈 全球看盤</h1>
-      <!-- 下拉選單完全由自選名單族群動態產生 -->
-      <select id="symbol-select" title="自選名單（依自訂分類族群與排序顯示）"></select>
+      <select id="symbol-select">
+        <optgroup label="🇹🇼 台灣指數與熱門股">
+          <option value="^TWII">台灣加權指數 (^TWII)</option>
+          <option value="2330.TW" selected>台積電 (2330.TW)</option>
+          <option value="0050.TW">元大台灣50 (0050.TW)</option>
+          <option value="00878.TW">國泰永續高股息 (00878.TW)</option>
+          <option value="8069.TWO">元太 (8069.TWO)</option>
+          <option value="5347.TWO">世界 (5347.TWO)</option>
+          <option value="4958.TW">臻鼎-KY (4958.TW)</option>
+        </optgroup>
+        <optgroup label="🇺🇸 美國指數與熱門股">
+          <option value="^GSPC">標普 500 (^GSPC)</option>
+          <option value="^IXIC">那斯達克綜合 (^IXIC)</option>
+          <option value="^DJI">道瓊工業 (^DJI)</option>
+          <option value="^SOX">費城半導體 (^SOX)</option>
+          <option value="^VIX">VIX 恐慌指數 (^VIX)</option>
+          <option value="NVDA">NVIDIA (NVDA)</option>
+          <option value="SPY">SPY ETF</option>
+          <option value="QQQ">QQQ ETF</option>
+        </optgroup>
+        <optgroup label="🌏 亞歐全球主要指數">
+          <option value="^N225">日本日經 225 (^N225)</option>
+          <option value="^KS11">韓國 KOSPI (^KS11)</option>
+          <option value="^HSI">香港恆生指數 (^HSI)</option>
+          <option value="000001.SS">中國上證指數 (000001.SS)</option>
+          <option value="^GDAXI">德國 DAX (^GDAXI)</option>
+          <option value="^FTSE">英國富時 100 (^FTSE)</option>
+          <option value="^FCHI">法國 CAC 40 (^FCHI)</option>
+        </optgroup>
+        <optgroup label="🥇 黃金、石油與外匯匯率">
+          <option value="GC=F">黃金期貨 (GC=F)</option>
+          <option value="XAUUSD=X">黃金現貨 (XAUUSD=X)</option>
+          <option value="GLD">SPDR 黃金 ETF (GLD)</option>
+          <option value="^HUI">金礦股指數 (^HUI)</option>
+          <option value="CL=F">輕原油期貨 (CL=F)</option>
+          <option value="BZ=F">布蘭特原油 (BZ=F)</option>
+          <option value="TWD=X">美元/台幣 (TWD=X)</option>
+          <option value="JPY=X">美元/日圓 (JPY=X)</option>
+          <option value="JPYTWD=X">日圓/台幣 相對匯率 (JPYTWD=X)</option>
+        </optgroup>
+        <optgroup label="🪙 加密貨幣">
+          <option value="BTCUSDT">BTC / USDT</option>
+          <option value="ETHUSDT">ETH / USDT</option>
+        </optgroup>
+      </select>
       <input id="custom-symbol" type="text" placeholder="代號(如4958)" />
       <button id="search-btn">查詢</button>
       <button id="fav-btn" title="快速加入或移除目前標的">⭐ 自選</button>
@@ -403,16 +446,15 @@
         <span>🗂️ 自選名單管理（自訂分類族群、排序、命名）</span>
         <button id="close-wl-btn" style="padding:2px 8px;">✕</button>
       </div>
-       <div class="wl-toolbar">
-        <input id="wl-new-group-input" type="text" placeholder="新族群名稱（如：AI概念股）" style="width:160px;" />
+      <div class="wl-toolbar">
+        <input id="wl-new-group-input" type="text" placeholder="新族群名稱（如：AI概念股）" style="width:170px;" />
         <button id="wl-add-group-btn" class="primary">➕ 新增族群</button>
         <span style="color:#5d606b;">|</span>
-        <input id="wl-add-sym-input" type="text" placeholder="代號（如：AAPL 或 ^GSPC）" style="width:125px;" />
-        <input id="wl-add-name-input" type="text" placeholder="自訂顯示名稱（選填）" style="width:130px;" />
-        <select id="wl-target-group-select" style="max-width:125px;"></select>
+        <input id="wl-add-sym-input" type="text" placeholder="代號（如：AAPL）" style="width:110px;" />
+        <input id="wl-add-name-input" type="text" placeholder="自訂顯示名稱（選填）" style="width:140px;" />
+        <select id="wl-target-group-select" style="max-width:130px;"></select>
         <button id="wl-add-item-btn">加入自選</button>
-        <button id="wl-reset-default-btn" title="還原預設全市場族群（台股、美股、全球指數、黃金石油匯率、加密貨幣）">↩️ 還原預設</button>
-       </div>
+      </div>
       <div id="watchlist-groups-container" class="wl-body"></div>
     </div>
   </div>
@@ -429,7 +471,7 @@
     </div>
   </div>
 
-  <script src="./data.js?v=40"></script>
-  <script src="./app.js?v=40"></script>
+  <script src="./data.js?v=42"></script>
+  <script src="./app.js?v=42"></script>
 </body>
 </html>
