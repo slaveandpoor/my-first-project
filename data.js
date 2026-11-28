@@ -17,14 +17,12 @@ window.MarketAPI = {
       return favMap[sym];
     }
 
-    // 針對台股 (.TW / .TWO) 自動透過 Yahoo 奇摩股市網頁標題解析繁體中文股名
     if (sym.endsWith('.TW') || sym.endsWith('.TWO')) {
       try {
         const twUrl = `https://tw.stock.yahoo.com/quote/${encodeURIComponent(sym)}`;
         const res = await fetch(this.worker + encodeURIComponent(twUrl));
         if (res.ok) {
           const html = await res.text();
-          // 網頁 title 格式通常為：世界(5347) - 走勢圖 - Yahoo奇摩股市 或 臻鼎-KY (4958.TW) ...
           const titleMatch = html.match(/<title[^>]*>([^<(（]+)/i);
           if (titleMatch && titleMatch[1]) {
             const cleaned = titleMatch[1].trim();
@@ -37,7 +35,6 @@ window.MarketAPI = {
       } catch (e) {}
     }
 
-    // 備援：透過 Yahoo Finance Search API 查詢（適用於美股、全球指數或網頁未攔截到的情況）
     try {
       const sUrl = 'https://' + 'query1.finance.yahoo' + `.com/v1/finance/search?q=${encodeURIComponent(sym)}&lang=zh-Hant-TW®ion=TW"esCount=1`;
       const res = await fetch(this.worker + encodeURIComponent(sUrl));
@@ -102,5 +99,67 @@ window.MarketAPI = {
       if (data) return { sym: cSym, data };
     }
     throw new Error(`查無 ${rawSym} 或連線逾時`);
+  },
+
+  computeIndicators(candles) {
+    const maPeriods = [3, 6, 18, 60, 120, 240];
+    const volPeriods = [5, 10];
+    const maSeries = Object.fromEntries(maPeriods.map(p => [p, []]));
+    const volMaSeries = Object.fromEntries(volPeriods.map(p => [p, []]));
+    const bbUpper = [], bbMid = [], bbLower = [];
+    const byTime = new Map();
+
+    let closeSum = 0;
+    const prefixClose = [0];
+    const prefixVol = [0];
+    for (let i = 0; i < candles.length; i++) {
+      prefixClose.push(prefixClose[i] + candles[i].close);
+      prefixVol.push(prefixVol[i] + (candles[i].volume || 0));
+    }
+
+    for (let i = 0; i < candles.length; i++) {
+      const t = candles[i].time;
+      const info = { ma: {}, volMa: {}, bb: null };
+
+      // 價格均線 MA3, MA6, MA18, MA60, MA120, MA240
+      for (const p of maPeriods) {
+        if (i >= p - 1) {
+          const val = Number(((prefixClose[i + 1] - prefixClose[i + 1 - p]) / p).toFixed(2));
+          maSeries[p].push({ time: t, value: val });
+          info.ma[p] = val;
+        }
+      }
+
+      // 成交量均線 MA5, MA10
+      for (const p of volPeriods) {
+        if (i >= p - 1) {
+          const val = Math.round((prefixVol[i + 1] - prefixVol[i + 1 - p]) / p);
+          volMaSeries[p].push({ time: t, value: val });
+          info.volMa[p] = val;
+        }
+      }
+
+      // 布林通道 (20期, 上下2倍標準差)
+      if (i >= 19) {
+        const mean = (prefixClose[i + 1] - prefixClose[i - 19]) / 20;
+        let sqDiffSum = 0;
+        for (let j = i - 19; j <= i; j++) {
+          const diff = candles[j].close - mean;
+          sqDiffSum += diff * diff;
+        }
+        const std = Math.sqrt(sqDiffSum / 20);
+        const mid = Number(mean.toFixed(2));
+        const up = Number((mean + 2 * std).toFixed(2));
+        const low = Number((mean - 2 * std).toFixed(2));
+        bbMid.push({ time: t, value: mid });
+        bbUpper.push({ time: t, value: up });
+        bbLower.push({ time: t, value: low });
+        info.bb = { up, mid, low };
+      }
+
+      byTime.set(t, info);
+    }
+
+    return { maSeries, volMaSeries, bbUpper, bbMid, bbLower, byTime };
   }
 };
