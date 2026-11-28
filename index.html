@@ -13,11 +13,12 @@
     #status-badge { font-size: 12px; padding: 4px 10px; border-radius: 4px; background: #2a2e39; color: #4caf50; }
     select, input, button { background: #2a2e39; color: #d1d4dc; border: 1px solid #363a45; padding: 4px 8px; border-radius: 4px; font-size: 13px; }
     input#custom-symbol { width: 130px; }
-    input#rect-ratios { width: 145px; font-size: 12px; }
+    input#rect-ratios { width: 140px; font-size: 12px; }
     input[type="color"] { width: 32px; height: 28px; padding: 1px 2px; cursor: pointer; }
     button { cursor: pointer; }
     button.active { background: #2962ff; color: #fff; border-color: #2962ff; }
     button.danger { background: #b22833; color: #fff; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
     label.chk { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; background: #2a2e39; border: 1px solid #363a45; padding: 4px 8px; border-radius: 4px; cursor: pointer; user-select: none; }
     label.chk input { width: auto; margin: 0; }
     #charts-wrapper { flex: 1 1 auto; display: flex; flex-direction: column; width: 100%; min-height: 0; overflow: hidden; }
@@ -26,6 +27,32 @@
     #volume-container { flex: 1 1 0; width: 100%; min-height: 0; position: relative; }
     #ohlc-legend { position: absolute; top: 8px; left: 12px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.82); padding: 5px 10px; border-radius: 4px; pointer-events: none; line-height: 1.55; max-width: calc(100% - 105px); }
     #vol-legend { position: absolute; top: 4px; left: 12px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.82); padding: 2px 8px; border-radius: 4px; pointer-events: none; color: #9598a1; }
+
+    /* 選擇性管理清單浮動面板 */
+    #drawings-panel {
+      display: none;
+      position: absolute;
+      top: 10px;
+      right: 92px;
+      width: 340px;
+      max-height: 68%;
+      background: rgba(30, 34, 45, 0.96);
+      border: 1px solid #363a45;
+      border-radius: 6px;
+      z-index: 20;
+      flex-direction: column;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+    }
+    #drawings-panel.open { display: flex; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid #363a45; font-size: 13px; font-weight: bold; color: #fff; }
+    .panel-actions { display: flex; gap: 6px; padding: 6px 10px; border-bottom: 1px solid #2a2e39; background: #181c27; }
+    #drawings-list { overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 5px; }
+    .draw-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; background: #242834; border: 1px solid #363a45; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    .draw-item.selected { border-color: #2962ff; background: #233154; }
+    .draw-item-info { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .color-dot { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto; border: 1px solid rgba(255,255,255,0.4); }
+    .item-del-btn { background: #8e2430; color: #fff; border: none; padding: 2px 7px; border-radius: 3px; font-size: 11px; }
+    .item-del-btn:hover { background: #ef5350; }
   </style>
 </head>
 <body>
@@ -82,7 +109,7 @@
       <label class="chk"><input type="checkbox" id="toggle-ma" checked /> 均線</label>
       <label class="chk"><input type="checkbox" id="toggle-bb" checked /> 布林</label>
       <label class="chk"><input type="checkbox" id="toggle-deduct" checked /> 扣抵▲</label>
-      <select id="color-select" title="選擇畫線預設顏色">
+      <select id="color-select" title="選擇畫線顏色（已選取圖形時可即時變色）">
         <option value="#2962ff">🔵 藍</option>
         <option value="#26a69a">🟢 綠</option>
         <option value="#ef5350">🔴 紅</option>
@@ -91,7 +118,7 @@
         <option value="#e040fb">🟣 紫</option>
         <option value="#ff9800">🟠 橘</option>
       </select>
-      <input type="color" id="custom-color" value="#2962ff" title="自訂任意顏色" />
+      <input type="color" id="custom-color" value="#2962ff" title="自訂任意顏色（已選取圖形時可即時變色）" />
       <select id="draw-tool-select" title="選擇畫圖工具">
         <option value="hline">➖ 水平切線</option>
         <option value="vline">｜ 垂直切線</option>
@@ -102,18 +129,30 @@
       </select>
       <button id="draw-btn">➕ 開始畫圖</button>
       <input id="rect-ratios" type="text" value="0.333, 0.5, 0.6667" title="四方形倍數(由起點算，逗號分隔，按Enter即時更新)" placeholder="倍數 e.g. 0.333,0.5,0.6667" />
-      <button id="undo-draw-btn" title="刪除最後一筆繪圖">↩️ 復原</button>
-      <button id="clear-lines-btn" class="danger" title="清除目前商品全部雲端繪圖">🗑️ 清除雲端</button>
+      <button id="delete-selected-btn" class="danger" disabled title="刪除目前在圖表上點選的線條/圖形 (或按 Delete 鍵)">❌ 刪選取</button>
+      <button id="manage-list-btn" title="開啟繪圖清單逐筆選擇刪除或改色">📋 清單</button>
+      <button id="clear-lines-btn" class="danger" title="清除目前商品全部雲端繪圖">🗑️ 全清</button>
     </div>
   </header>
   <div id="charts-wrapper">
     <div id="chart-container">
       <div id="ohlc-legend">載入中...</div>
       <canvas id="draw-canvas"></canvas>
+      <div id="drawings-panel">
+        <div class="panel-header">
+          <span>📋 雲端繪圖管理（點選高亮 / 單筆刪除）</span>
+          <button id="close-panel-btn" style="padding:2px 6px;">✕</button>
+        </div>
+        <div class="panel-actions">
+          <button id="del-checked-btn" class="danger" style="font-size:12px;">刪除已勾選</button>
+          <span style="font-size:11px; color:#9598a1; align-self:center;">提示：圖上直接點線可選取，按 Delete 刪除</span>
+        </div>
+        <div id="drawings-list"></div>
+      </div>
     </div>
     <div id="volume-container"><div id="vol-legend">成交量</div></div>
   </div>
-  <script src="./data.js?v=22"></script>
-  <script src="./app.js?v=22"></script>
+  <script src="./data.js?v=23"></script>
+  <script src="./app.js?v=23"></script>
 </body>
 </html>
