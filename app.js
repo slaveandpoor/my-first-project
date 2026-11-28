@@ -101,6 +101,40 @@ function initApp() {
     };
   }
 
+  function getMeasureLabelPoint(shape) {
+    if (shape.labelPos && shape.labelPos.price != null) {
+      return shape.labelPos;
+    }
+    const midLogical = ((shape.p1?.logical ?? 0) + (shape.p2?.logical ?? 0)) / 2;
+    const midPrice = (((shape.p1?.price ?? 0) + (shape.p2?.price ?? 0)) / 2);
+    return {
+      logical: Number(midLogical.toFixed(3)),
+      time: logicalToTime(midLogical),
+      price: Number(midPrice.toFixed(2))
+    };
+  }
+
+  function getMeasureLabelBoxRect(shape) {
+    const lp = pointToPixel(getMeasureLabelPoint(shape));
+    if (!lp) return null;
+    const stats = calcStartToTargetStats(shape.p1, shape.p2);
+    const summaryLabel = `${stats.pctDisplay} | 差 ${stats.diffStr}`;
+    drawCtx.save();
+    drawCtx.font = isMobile() ? 'bold 10px sans-serif' : 'bold 11px sans-serif';
+    const padX = 6, h = 17;
+    const w = drawCtx.measureText(summaryLabel).width + padX * 2;
+    drawCtx.restore();
+    return {
+      x: lp.x - w / 2,
+      y: lp.y - h / 2,
+      w,
+      h,
+      centerX: lp.x,
+      centerY: lp.y,
+      text: summaryLabel
+    };
+  }
+
   function openCreateNoteModal(p1, p2) {
     noteModalState = { mode: 'create', p1, p2 };
     textModalTitle.textContent = '💬 新增文字 / 數字註記';
@@ -787,6 +821,17 @@ function initApp() {
     const plotW = chartContainer.clientWidth - getPriceScaleWidth();
     if (mx < 0 || mx > plotW) return null;
 
+    // 優先檢查 measure 標籤框拖曳（即使尚未選取也能直接拖曳標籤位置）
+    for (let i = cloudShapes.length - 1; i >= 0; i--) {
+      const s = cloudShapes[i];
+      if (s.type === 'measure') {
+        const box = getMeasureLabelBoxRect(s);
+        if (box && mx >= box.x - 4 && mx <= box.x + box.w + 4 && my >= box.y - 4 && my <= box.y + box.h + 4) {
+          return { target: { kind: 'shape', index: i }, mode: 'label' };
+        }
+      }
+    }
+
     if (selectedTarget?.kind === 'shape') {
       const idx = selectedTarget.index;
       const s = cloudShapes[idx];
@@ -875,18 +920,19 @@ function initApp() {
     return a && b && a.kind === b.kind && a.index === b.index;
   }
 
-  function drawTag(text, x, y, color, align = 'left') {
+  function drawTag(text, x, y, color, align = 'left', isMovableBadge = false, isHighlighted = false) {
     drawCtx.save();
     drawCtx.font = isMobile() ? 'bold 10px sans-serif' : 'bold 11px sans-serif';
-    const padX = 5, h = 15;
+    const padX = isMovableBadge ? 6 : 5;
+    const h = isMovableBadge ? 17 : 15;
     const w = drawCtx.measureText(text).width + padX * 2;
     const drawX = align === 'right' ? x - w : (align === 'center' ? x - w / 2 : x);
-    drawCtx.fillStyle = 'rgba(19, 23, 34, 0.9)';
+    drawCtx.fillStyle = isMovableBadge ? 'rgba(24, 30, 46, 0.96)' : 'rgba(19, 23, 34, 0.9)';
     drawCtx.fillRect(drawX, y - h / 2, w, h);
     drawCtx.strokeStyle = color;
-    drawCtx.lineWidth = 1;
+    drawCtx.lineWidth = isHighlighted ? 1.8 : 1;
     drawCtx.strokeRect(drawX, y - h / 2, w, h);
-    drawCtx.fillStyle = color;
+    drawCtx.fillStyle = isMovableBadge ? '#ffffff' : color;
     drawCtx.textBaseline = 'middle';
     drawCtx.fillText(text, drawX + padX, y);
     drawCtx.restore();
@@ -1003,10 +1049,11 @@ function initApp() {
         });
 
         const stats = calcStartToTargetStats(shape.p1, shape.p2);
-        const midX = (p1.x + p2.x) / 2;
-        const midY = (p1.y + p2.y) / 2;
         const summaryLabel = `${stats.pctDisplay} | 差 ${stats.diffStr}`;
-        drawTag(summaryLabel, midX, midY - 12, color, 'center');
+        const labelPt = pointToPixel(getMeasureLabelPoint(shape));
+        if (labelPt) {
+          drawTag(summaryLabel, labelPt.x, labelPt.y, color, 'center', true, isHighlighted);
+        }
         drawTag(`起 ${shape.p1.price}`, p1.x + 6, p1.y + 11, color);
         drawTag(`終 ${shape.p2.price}`, p2.x + 6, p2.y + 11, color);
 
@@ -1287,7 +1334,9 @@ function initApp() {
       syncPriceLinesStyle();
     } else if (target.kind === 'shape') {
       const s = JSON.parse(JSON.stringify(origItem));
-      if (mode === 'move') {
+      if (mode === 'label') {
+        s.labelPos = { logical: pt.logical, time: pt.time, price: pt.price };
+      } else if (mode === 'move') {
         if (s.p1) {
           const nl = Number((s.p1.logical + dLogical).toFixed(3));
           s.p1 = { ...s.p1, logical: nl, time: logicalToTime(nl), price: Number((s.p1.price + dPrice).toFixed(2)) };
@@ -1295,6 +1344,10 @@ function initApp() {
         if (s.p2) {
           const nl2 = Number((s.p2.logical + dLogical).toFixed(3));
           s.p2 = { ...s.p2, logical: nl2, time: logicalToTime(nl2), price: Number((s.p2.price + dPrice).toFixed(2)) };
+        }
+        if (s.labelPos) {
+          const nl3 = Number((s.labelPos.logical + dLogical).toFixed(3));
+          s.labelPos = { ...s.labelPos, logical: nl3, time: logicalToTime(nl3), price: Number((s.labelPos.price + dPrice).toFixed(2)) };
         }
       } else if (mode === 'p1') {
         s.p1 = { logical: pt.logical, time: pt.time, price: pt.price };
@@ -1683,6 +1736,7 @@ function initApp() {
         if (!isSameTarget(hit, hoveredTarget)) {
           hoveredTarget = hit;
           if (!hitInfo) chartContainer.style.cursor = '';
+          else if (hitInfo.mode === 'label') chartContainer.style.cursor = 'move';
           else if (hitInfo.mode === 'p1' || hitInfo.mode === 'p2') chartContainer.style.cursor = 'nwse-resize';
           else if (hitInfo.mode === 'top' || hitInfo.mode === 'bottom') chartContainer.style.cursor = 'ns-resize';
           else if (hitInfo.mode === 'left' || hitInfo.mode === 'right') chartContainer.style.cursor = 'ew-resize';
@@ -2057,6 +2111,15 @@ function initApp() {
       };
       if (tool === 'rect') {
         shape.ratios = getRatios();
+      }
+      if (tool === 'measure') {
+        const midLogical = (p1.logical + p2.logical) / 2;
+        const midPrice = (p1.price + p2.price) / 2;
+        shape.labelPos = {
+          logical: Number(midLogical.toFixed(3)),
+          time: logicalToTime(midLogical),
+          price: Number(midPrice.toFixed(2))
+        };
       }
       await docRef.set({
         shapes: firebase.firestore.FieldValue.arrayUnion(shape)
