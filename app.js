@@ -79,6 +79,15 @@ function initApp() {
   const noteCancelBtn = document.getElementById('note-cancel-btn');
   const noteConfirmBtn = document.getElementById('note-confirm-btn');
 
+  // ===== 週期順序與快捷鍵設定 =====
+  const TF_ORDER = ['1mo', '1wk', '1d', '60m'];
+  const TF_NAMES = {
+    '1mo': '月線',
+    '1wk': '週線',
+    '1d': '日線',
+    '60m': '60分線'
+  };
+
   // ===== 自訂分類族群、排序、命名自選名單 =====
   const DEFAULT_WATCHLIST_GROUPS = [
     {
@@ -153,6 +162,56 @@ function initApp() {
       });
     });
     return map;
+  }
+
+  function getFlatWatchlist() {
+    const list = [];
+    const seen = new Set();
+    (watchlistGroups || []).forEach(grp => {
+      (grp.items || []).forEach(it => {
+        const sym = normalizeSymbolCode(it.symbol);
+        if (sym && !seen.has(sym)) {
+          seen.add(sym);
+          list.push({ symbol: sym, label: it.label || sym, groupName: grp.name });
+        }
+      });
+    });
+    return list;
+  }
+
+  function cycleTimeframe(delta) {
+    let idx = TF_ORDER.indexOf(currentInterval);
+    if (idx === -1) idx = 2; // 預設日線
+    const nextIdx = Math.max(0, Math.min(TF_ORDER.length - 1, idx + delta));
+    const nextTf = TF_ORDER[nextIdx];
+    if (nextTf === currentInterval) return;
+
+    currentInterval = nextTf;
+    if (intervalSelect) intervalSelect.value = nextTf;
+
+    statusBadge.style.color = '#90caf9';
+    statusBadge.textContent = `⏱️ ${currentName} → ${TF_NAMES[nextTf] || nextTf}`;
+    switchSymbol(currentSymbol);
+  }
+
+  function cycleWatchlistSymbol(delta) {
+    const wl = getFlatWatchlist();
+    if (!wl.length) {
+      statusBadge.style.color = '#ffeb3b';
+      statusBadge.textContent = '⚠️ 自選名單目前沒有股票';
+      return;
+    }
+
+    const curNorm = normalizeSymbolCode(currentSymbol);
+    let idx = wl.findIndex(item => item.symbol === curNorm);
+    if (idx === -1) idx = 0;
+
+    const nextIdx = (idx + delta + wl.length) % wl.length;
+    const nextItem = wl[nextIdx];
+
+    statusBadge.style.color = '#90caf9';
+    statusBadge.textContent = `⭐ [${nextIdx + 1}/${wl.length}] ${nextItem.label} (${TF_NAMES[currentInterval] || currentInterval})`;
+    switchSymbol(nextItem.symbol);
   }
 
   function findWatchlistItem(symbol) {
@@ -2401,6 +2460,26 @@ function initApp() {
   window.addEventListener('keydown', async e => {
     if (textModalBackdrop.classList.contains('open') || watchlistBackdrop?.classList.contains('open')) return;
     if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+    if (e.altKey && e.key === 'ArrowRight') {
+      e.preventDefault();
+      cycleTimeframe(1);
+      return;
+    }
+    if (e.altKey && e.key === 'ArrowLeft') {
+      e.preventDefault();
+      cycleTimeframe(-1);
+      return;
+    }
+    if (e.altKey && e.key === 'ArrowDown') {
+      e.preventDefault();
+      cycleWatchlistSymbol(1);
+      return;
+    }
+    if (e.altKey && e.key === 'ArrowUp') {
+      e.preventDefault();
+      cycleWatchlistSymbol(-1);
+      return;
+    }
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
       const startIdx = keyboardBarIndex >= 0 ? keyboardBarIndex : lastCandles.length - 1;
