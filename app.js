@@ -41,6 +41,8 @@ function initApp() {
   const chartContainer = document.getElementById('chart-container');
   const volumeContainer = document.getElementById('volume-container');
   const subIndicatorContainer = document.getElementById('sub-indicator-container');
+  const resizerMainVol = document.getElementById('resizer-main-vol');
+  const resizerVolSub = document.getElementById('resizer-vol-sub');
   const drawCanvas = document.getElementById('draw-canvas');
   const drawCtx = drawCanvas.getContext('2d');
   const ohlcLegend = document.getElementById('ohlc-legend');
@@ -66,6 +68,72 @@ function initApp() {
   let unsub = null, liveTimer = null, favMap = {}, lastCandles = [], syncingCross = false, indicators = null;
   let subDataMap = new Map();
   let keyboardBarIndex = -1;
+
+  // ========== 主附圖分隔線自由拖曳調整大小 ==========
+  function setupPaneResizer(resizerEl, topPane, bottomPane) {
+    let active = false;
+    let startY = 0;
+    let startTopH = 0;
+    let startBottomH = 0;
+
+    const onStart = clientY => {
+      if (bottomPane.style.display === 'none') return;
+      active = true;
+      startY = clientY;
+      startTopH = topPane.getBoundingClientRect().height;
+      startBottomH = bottomPane.getBoundingClientRect().height;
+      resizerEl.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'ns-resize';
+    };
+
+    const onMove = clientY => {
+      if (!active) return;
+      const dy = clientY - startY;
+      const minTop = parseFloat(getComputedStyle(topPane).minHeight) || 50;
+      const minBottom = parseFloat(getComputedStyle(bottomPane).minHeight) || 45;
+      const totalH = startTopH + startBottomH;
+
+      let newTopH = Math.max(minTop, Math.min(totalH - minBottom, startTopH + dy));
+      let newBottomH = totalH - newTopH;
+
+      topPane.style.flex = `${newTopH} 1 0px`;
+      bottomPane.style.flex = `${newBottomH} 1 0px`;
+      requestAnimationFrame(renderDrawings);
+    };
+
+    const onEnd = () => {
+      if (!active) return;
+      active = false;
+      resizerEl.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      requestAnimationFrame(renderDrawings);
+    };
+
+    resizerEl.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      onStart(e.clientY);
+    });
+    window.addEventListener('mousemove', e => onMove(e.clientY));
+    window.addEventListener('mouseup', onEnd);
+
+    resizerEl.addEventListener('touchstart', e => {
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+      onStart(e.touches[0].clientY);
+    }, { passive: false });
+    window.addEventListener('touchmove', e => {
+      if (!active || e.touches.length !== 1) return;
+      e.preventDefault();
+      onMove(e.touches[0].clientY);
+    }, { passive: false });
+    window.addEventListener('touchend', onEnd);
+  }
+
+  setupPaneResizer(resizerMainVol, chartContainer, volumeContainer);
+  setupPaneResizer(resizerVolSub, volumeContainer, subIndicatorContainer);
 
   const isMobile = () => window.innerWidth <= 768;
   const getPriceScaleWidth = () => (isMobile() ? 58 : 80);
@@ -112,7 +180,6 @@ function initApp() {
   });
   const volumeSeries = volChart.addHistogramSeries({ priceFormat: { type: 'volume' } });
 
-  // 附圖 Series：月線 KD(9,3,3) / 週線 18-6 乖離 / 日線 MACD(12,26,9)
   const kdKSeries = subChart.addLineSeries({ color: '#ffeb3b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
   const kdDSeries = subChart.addLineSeries({ color: '#00e5ff', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true });
 
@@ -191,7 +258,6 @@ function initApp() {
     });
   });
 
-  // ========== 附圖指標計算（月線KD / 週線18-6乖離 / 日線MACD） ==========
   function calcEMA(values, period) {
     const k = 2 / (period + 1);
     const out = new Array(values.length).fill(null);
@@ -237,11 +303,13 @@ function initApp() {
 
     if (!isMonth && !isWeek && !isDay) {
       subIndicatorContainer.style.display = 'none';
+      resizerVolSub.style.display = 'none';
       volChart.applyOptions({ timeScale: { visible: true, borderColor: '#2a2e39', timeVisible: true } });
       return;
     }
 
     subIndicatorContainer.style.display = 'block';
+    resizerVolSub.style.display = 'block';
     volChart.applyOptions({ timeScale: { visible: false } });
     subChart.applyOptions({ timeScale: { visible: true, borderColor: '#2a2e39', timeVisible: true } });
 
@@ -253,7 +321,6 @@ function initApp() {
     const r2 = n => Number(n.toFixed(2));
 
     if (isMonth) {
-      // KD(9, 3, 3) -> RSV 9日/月，K與D皆以 1/3 權重平滑（Kt=3, Dt=3）
       const kData = [], dData = [];
       let prevK = 50, prevD = 50;
       for (let i = 0; i < candles.length; i++) {
@@ -278,7 +345,6 @@ function initApp() {
       kdKSeries.setData(kData);
       kdDSeries.setData(dData);
     } else if (isWeek) {
-      // 18-6 乖離（天數1: 18, 天數2: 6）
       const closes = candles.map(c => c.close);
       const ma18 = calcSMA(closes, 18);
       const ma6 = calcSMA(closes, 6);
@@ -298,7 +364,6 @@ function initApp() {
       bias6Series.setData(b6Data);
       zeroRefSeries.setData(zeroData);
     } else if (isDay) {
-      // MACD(12, 26, 9)
       const closes = candles.map(c => c.close);
       const ema12 = calcEMA(closes, 12);
       const ema26 = calcEMA(closes, 26);
@@ -366,7 +431,6 @@ function initApp() {
     }
   }
 
-  // ========== 鍵盤方向鍵移動至各根K棒收盤價 ==========
   function moveCrosshairToBarClose(idx) {
     if (!lastCandles.length) return;
     const clamped = Math.max(0, Math.min(lastCandles.length - 1, idx));
@@ -969,17 +1033,6 @@ function initApp() {
       shapes: nextShapes
     }, { merge: true });
   };
-
-  function syncAllLogicalRanges(r) {
-    if (!r || syncingCross) return;
-    syncingCross = true;
-    volChart.timeScale().setVisibleLogicalRange(r);
-    if (subIndicatorContainer.style.display !== 'none') {
-      subChart.timeScale().setVisibleLogicalRange(r);
-    }
-    syncingCross = false;
-    renderDrawings();
-  }
 
   chart.timeScale().subscribeVisibleLogicalRangeChange(r => {
     if (!r) return;
