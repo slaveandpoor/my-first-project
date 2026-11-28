@@ -49,9 +49,20 @@ function initApp() {
   const ohlcLegend = document.getElementById('ohlc-legend');
   const volLegend = document.getElementById('vol-legend');
   const subLegend = document.getElementById('sub-legend');
-  const symbolSelect = document.getElementById('symbol-select'), favGroup = document.getElementById('fav-group');
+  const symbolSelect = document.getElementById('symbol-select');
   const intervalSelect = document.getElementById('interval-select'), customInput = document.getElementById('custom-symbol'), searchBtn = document.getElementById('search-btn');
-  const favBtn = document.getElementById('fav-btn'), colorSelect = document.getElementById('color-select'), customColorInput = document.getElementById('custom-color');
+  const favBtn = document.getElementById('fav-btn'), manageFavBtn = document.getElementById('manage-fav-btn');
+  const watchlistBackdrop = document.getElementById('watchlist-modal-backdrop');
+  const closeWlBtn = document.getElementById('close-wl-btn');
+  const wlNewGroupInput = document.getElementById('wl-new-group-input');
+  const wlAddGroupBtn = document.getElementById('wl-add-group-btn');
+  const wlAddSymInput = document.getElementById('wl-add-sym-input');
+  const wlAddNameInput = document.getElementById('wl-add-name-input');
+  const wlTargetGroupSelect = document.getElementById('wl-target-group-select');
+  const wlAddItemBtn = document.getElementById('wl-add-item-btn');
+  const wlGroupsContainer = document.getElementById('watchlist-groups-container');
+
+  const colorSelect = document.getElementById('color-select'), customColorInput = document.getElementById('custom-color');
   const lineWidthSelect = document.getElementById('line-width-select');
   const drawToolSelect = document.getElementById('draw-tool-select'), drawBtn = document.getElementById('draw-btn');
   const rectRatiosInput = document.getElementById('rect-ratios');
@@ -64,6 +75,317 @@ function initApp() {
   const noteTextarea = document.getElementById('note-textarea');
   const noteCancelBtn = document.getElementById('note-cancel-btn');
   const noteConfirmBtn = document.getElementById('note-confirm-btn');
+
+  // ===== 自訂分類族群、排序、命名自選名單 =====
+  const DEFAULT_WATCHLIST_GROUPS = [
+    {
+      id: 'grp_us_giants',
+      name: '🇺🇸 美國巨頭',
+      items: [
+        { symbol: 'MSFT', label: '微軟 Microsoft' },
+        { symbol: 'AAPL', label: '蘋果 Apple' },
+        { symbol: 'NVDA', label: '輝達 NVIDIA' },
+        { symbol: 'GOOGL', label: 'Google Alphabet' },
+        { symbol: 'AMZN', label: '亞馬遜 Amazon' },
+        { symbol: 'META', label: 'Meta Platforms' },
+        { symbol: 'ORCL', label: '甲骨文 Oracle' },
+        { symbol: 'INTC', label: '英特爾 Intel' },
+        { symbol: 'TSLA', label: '特斯拉 Tesla' },
+        { symbol: 'SPCX', label: 'SpaceX' },
+        { symbol: 'TSM', label: '台積電 ADR' },
+        { symbol: 'MU', label: '美光 Micron' },
+        { symbol: 'AMD', label: '超微 AMD' },
+        { symbol: 'ANT', label: 'Anthropic' }
+      ]
+    }
+  ];
+  const WL_LOCAL_KEY = 'market_watchlist_groups_v1';
+  let watchlistGroups = [];
+  let watchlistInitialized = false;
+
+  const cloneDefaultWatchlist = () => JSON.parse(JSON.stringify(DEFAULT_WATCHLIST_GROUPS));
+  const normalizeSymbolCode = raw => {
+    let s = String(raw || '').trim().toUpperCase();
+    if (/^\d{4,6}$/.test(s)) s += '.TW';
+    return s;
+  };
+
+  function getFlatFavMap() {
+    const map = {};
+    watchlistGroups.forEach(g => {
+      (g.items || []).forEach(it => {
+        if (it.symbol) map[it.symbol] = it.label || it.symbol;
+      });
+    });
+    return map;
+  }
+
+  function findWatchlistItem(symbol) {
+    const target = normalizeSymbolCode(symbol);
+    for (let gIdx = 0; gIdx < watchlistGroups.length; gIdx++) {
+      const items = watchlistGroups[gIdx].items || [];
+      const iIdx = items.findIndex(it => normalizeSymbolCode(it.symbol) === target);
+      if (iIdx !== -1) {
+        return { gIdx, iIdx, group: watchlistGroups[gIdx], item: items[iIdx] };
+      }
+    }
+    return null;
+  }
+
+  function saveLocalWatchlist() {
+    try {
+      localStorage.setItem(WL_LOCAL_KEY, JSON.stringify(watchlistGroups));
+    } catch (e) {}
+  }
+
+  async function saveWatchlistGroups() {
+    favMap = getFlatFavMap();
+    saveLocalWatchlist();
+    renderWatchlistDropdown();
+    if (watchlistBackdrop?.classList.contains('open')) {
+      renderWatchlistManagerModal();
+    }
+    try {
+      await db.collection('user_settings').doc('watchlist_groups_v1').set({
+        groups: watchlistGroups,
+        updatedAt: Date.now()
+      }, { merge: true });
+    } catch (e) {
+      console.warn('同步自選分類失敗:', e);
+    }
+  }
+
+  function updateFavButtonState() {
+    if (!favBtn) return;
+    const found = findWatchlistItem(currentSymbol);
+    if (found) {
+      favBtn.classList.add('active');
+      favBtn.textContent = '★ 已自選';
+    } else {
+      favBtn.classList.remove('active');
+      favBtn.textContent = '⭐ 自選';
+    }
+  }
+
+  function renderWatchlistDropdown() {
+    const prevVal = symbolSelect.value;
+    const legacyFavGroup = document.getElementById('fav-group');
+    if (legacyFavGroup) legacyFavGroup.remove();
+
+    symbolSelect.querySelectorAll('optgroup[data-custom-wl="1"]').forEach(el => el.remove());
+
+    const firstGroup = symbolSelect.querySelector('optgroup');
+    watchlistGroups.forEach(grp => {
+      const og = document.createElement('optgroup');
+      og.label = `⭐ ${grp.name}`;
+      og.dataset.customWl = '1';
+      (grp.items || []).forEach(it => {
+        const opt = document.createElement('option');
+        opt.value = it.symbol;
+        opt.textContent = it.label ? `${it.label} (${it.symbol})` : it.symbol;
+        og.appendChild(opt);
+      });
+      if (firstGroup) symbolSelect.insertBefore(og, firstGroup);
+      else symbolSelect.appendChild(og);
+    });
+
+    if (prevVal) symbolSelect.value = prevVal;
+    updateFavButtonState();
+  }
+
+  function renderWatchlistManagerModal() {
+    if (!wlGroupsContainer || !wlTargetGroupSelect) return;
+    const prevTarget = wlTargetGroupSelect.value;
+    wlTargetGroupSelect.innerHTML = '';
+    watchlistGroups.forEach(grp => {
+      const opt = document.createElement('option');
+      opt.value = grp.id;
+      opt.textContent = grp.name;
+      wlTargetGroupSelect.appendChild(opt);
+    });
+    if (prevTarget && watchlistGroups.some(g => g.id === prevTarget)) {
+      wlTargetGroupSelect.value = prevTarget;
+    }
+
+    wlGroupsContainer.innerHTML = '';
+    watchlistGroups.forEach((grp, gIdx) => {
+      const card = document.createElement('div');
+      card.className = 'wl-group-card';
+
+      const head = document.createElement('div');
+      head.className = 'wl-group-head';
+
+      const titleBox = document.createElement('div');
+      titleBox.className = 'wl-group-title';
+      titleBox.textContent = `${grp.name}（${(grp.items || []).length}）`;
+
+      const actions = document.createElement('div');
+      actions.className = 'wl-group-actions';
+
+      const btnUpGrp = document.createElement('button');
+      btnUpGrp.className = 'wl-mini-btn';
+      btnUpGrp.textContent = '↑ 族群上移';
+      btnUpGrp.disabled = gIdx === 0;
+      btnUpGrp.onclick = async () => {
+        [watchlistGroups[gIdx - 1], watchlistGroups[gIdx]] = [watchlistGroups[gIdx], watchlistGroups[gIdx - 1]];
+        await saveWatchlistGroups();
+      };
+
+      const btnDownGrp = document.createElement('button');
+      btnDownGrp.className = 'wl-mini-btn';
+      btnDownGrp.textContent = '↓ 族群下移';
+      btnDownGrp.disabled = gIdx === watchlistGroups.length - 1;
+      btnDownGrp.onclick = async () => {
+        [watchlistGroups[gIdx + 1], watchlistGroups[gIdx]] = [watchlistGroups[gIdx], watchlistGroups[gIdx + 1]];
+        await saveWatchlistGroups();
+      };
+
+      const btnRenameGrp = document.createElement('button');
+      btnRenameGrp.className = 'wl-mini-btn';
+      btnRenameGrp.textContent = '✏️ 改族群名';
+      btnRenameGrp.onclick = async () => {
+        const nextName = prompt('請輸入新的族群名稱：', grp.name);
+        if (!nextName || !nextName.trim()) return;
+        grp.name = nextName.trim();
+        await saveWatchlistGroups();
+      };
+
+      const btnDelGrp = document.createElement('button');
+      btnDelGrp.className = 'wl-mini-btn danger';
+      btnDelGrp.textContent = '🗑️ 刪族群';
+      btnDelGrp.onclick = async () => {
+        if (!confirm(`確定要刪除整個「${grp.name}」族群及其內部清單嗎？`)) return;
+        watchlistGroups.splice(gIdx, 1);
+        if (watchlistGroups.length === 0) {
+          watchlistGroups.push({ id: 'grp_' + Date.now(), name: '預設自選', items: [] });
+        }
+        await saveWatchlistGroups();
+      };
+
+      actions.append(btnUpGrp, btnDownGrp, btnRenameGrp, btnDelGrp);
+      head.append(titleBox, actions);
+      card.appendChild(head);
+
+      const itemsWrap = document.createElement('div');
+      itemsWrap.className = 'wl-items';
+
+      if (!grp.items || grp.items.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'wl-empty-tip';
+        empty.textContent = '此族群目前尚無股票，可從上方輸入代號加入或由其他族群移動過來。';
+        itemsWrap.appendChild(empty);
+      } else {
+        grp.items.forEach((it, iIdx) => {
+          const row = document.createElement('div');
+          row.className = 'wl-item-row';
+
+          const left = document.createElement('div');
+          left.className = 'wl-item-left';
+
+          const badge = document.createElement('span');
+          badge.className = 'wl-sym-badge';
+          badge.textContent = it.symbol;
+          badge.title = '點擊立即切換看盤到此標的';
+          badge.onclick = () => {
+            watchlistBackdrop.classList.remove('open');
+            switchSymbol(it.symbol);
+          };
+
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'wl-name-text';
+          nameSpan.textContent = it.label || it.symbol;
+          nameSpan.title = '點擊修改顯示名稱';
+          nameSpan.onclick = async () => {
+            const nextLabel = prompt(`修改 ${it.symbol} 的顯示名稱：`, it.label || it.symbol);
+            if (nextLabel === null) return;
+            it.label = nextLabel.trim() || it.symbol;
+            if (normalizeSymbolCode(currentSymbol) === normalizeSymbolCode(it.symbol)) {
+              currentName = it.label;
+              if (lastCandles.length) updateLegends(lastCandles.at(-1));
+              updateStatusText();
+            }
+            await saveWatchlistGroups();
+          };
+
+          left.append(badge, nameSpan);
+
+          const btns = document.createElement('div');
+          btns.className = 'wl-item-btns';
+
+          const btnUp = document.createElement('button');
+          btnUp.className = 'wl-mini-btn';
+          btnUp.textContent = '↑';
+          btnUp.title = '上移';
+          btnUp.disabled = iIdx === 0;
+          btnUp.onclick = async () => {
+            [grp.items[iIdx - 1], grp.items[iIdx]] = [grp.items[iIdx], grp.items[iIdx - 1]];
+            await saveWatchlistGroups();
+          };
+
+          const btnDown = document.createElement('button');
+          btnDown.className = 'wl-mini-btn';
+          btnDown.textContent = '↓';
+          btnDown.title = '下移';
+          btnDown.disabled = iIdx === grp.items.length - 1;
+          btnDown.onclick = async () => {
+            [grp.items[iIdx + 1], grp.items[iIdx]] = [grp.items[iIdx], grp.items[iIdx + 1]];
+            await saveWatchlistGroups();
+          };
+
+          const btnRename = document.createElement('button');
+          btnRename.className = 'wl-mini-btn';
+          btnRename.textContent = '改名';
+          btnRename.onclick = async () => {
+            const nextLabel = prompt(`修改 ${it.symbol} 的顯示名稱：`, it.label || it.symbol);
+            if (nextLabel === null) return;
+            it.label = nextLabel.trim() || it.symbol;
+            if (normalizeSymbolCode(currentSymbol) === normalizeSymbolCode(it.symbol)) {
+              currentName = it.label;
+              if (lastCandles.length) updateLegends(lastCandles.at(-1));
+              updateStatusText();
+            }
+            await saveWatchlistGroups();
+          };
+
+          if (watchlistGroups.length > 1) {
+            const moveSelect = document.createElement('select');
+            moveSelect.className = 'wl-mini-btn';
+            moveSelect.title = '移動到其他族群';
+            watchlistGroups.forEach(targetG => {
+              const opt = document.createElement('option');
+              opt.value = targetG.id;
+              opt.textContent = `移至: ${targetG.name}`;
+              if (targetG.id === grp.id) opt.selected = true;
+              moveSelect.appendChild(opt);
+            });
+            moveSelect.onchange = async () => {
+              const dest = watchlistGroups.find(g => g.id === moveSelect.value);
+              if (!dest || dest.id === grp.id) return;
+              const [moved] = grp.items.splice(iIdx, 1);
+              dest.items.push(moved);
+              await saveWatchlistGroups();
+            };
+            btns.appendChild(moveSelect);
+          }
+
+          const btnDel = document.createElement('button');
+          btnDel.className = 'wl-mini-btn danger';
+          btnDel.textContent = '移除';
+          btnDel.onclick = async () => {
+            grp.items.splice(iIdx, 1);
+            await saveWatchlistGroups();
+          };
+
+          btns.append(btnUp, btnDown, btnRename, btnDel);
+          row.append(left, btns);
+          itemsWrap.appendChild(row);
+        });
+      }
+
+      card.appendChild(itemsWrap);
+      wlGroupsContainer.appendChild(card);
+    });
+  }
 
   let isDrawMode = false, pendingPoint = null, hoverPoint = null;
   let noteModalState = null;
@@ -78,6 +400,16 @@ function initApp() {
   let keyboardBarIndex = -1;
   let isPaneResizing = false;
   let customPaneHeights = null;
+
+  // 先載入本機快取並渲染下拉選單，避免啟動閃爍
+  try {
+    const cached = JSON.parse(localStorage.getItem(WL_LOCAL_KEY) || 'null');
+    watchlistGroups = (Array.isArray(cached) && cached.length) ? cached : cloneDefaultWatchlist();
+  } catch (e) {
+    watchlistGroups = cloneDefaultWatchlist();
+  }
+  favMap = getFlatFavMap();
+  renderWatchlistDropdown();
 
   const isMobile = () => window.innerWidth <= 768;
   const getPriceScaleWidth = () => (isMobile() ? 58 : 80);
@@ -687,20 +1019,20 @@ function initApp() {
     }
     if (info.mode === 'kd') {
       subLegend.innerHTML =
-        `<strong style="color:#fff">KD(9,3,3)</strong>  ` +
-        `<span style="color:#ffeb3b">K:${info.k}</span>  ` +
+        `<strong style="color:#fff">KD(9,3,3)</strong>  ` +
+        `<span style="color:#ffeb3b">K:${info.k}</span>  ` +
         `<span style="color:#00e5ff">D:${info.d}</span>`;
     } else if (info.mode === 'bias') {
       subLegend.innerHTML =
-        `<strong style="color:#fff">18-6乖離(18,6)</strong>  ` +
-        `<span style="color:#ff9800">乖離18:${info.bias18 !== null ? info.bias18 + '%' : '--'}</span>  ` +
+        `<strong style="color:#fff">18-6乖離(18,6)</strong>  ` +
+        `<span style="color:#ff9800">乖離18:${info.bias18 !== null ? info.bias18 + '%' : '--'}</span>  ` +
         `<span style="color:#69f0ae">乖離6:${info.bias6 !== null ? info.bias6 + '%' : '--'}</span>`;
     } else if (info.mode === 'macd') {
       const oscColor = (info.osc ?? 0) >= 0 ? '#26a69a' : '#ef5350';
       subLegend.innerHTML =
-        `<strong style="color:#fff">MACD(12,26,9)</strong>  ` +
-        `<span style="color:#ffffff">DIF:${info.dif ?? '--'}</span>  ` +
-        `<span style="color:#ffeb3b">MACD:${info.dea ?? '--'}</span>  ` +
+        `<strong style="color:#fff">MACD(12,26,9)</strong>  ` +
+        `<span style="color:#ffffff">DIF:${info.dif ?? '--'}</span>  ` +
+        `<span style="color:#ffeb3b">MACD:${info.dea ?? '--'}</span>  ` +
         `<span style="color:${oscColor}">OSC:${info.osc ?? '--'}</span>`;
     }
   }
@@ -821,7 +1153,6 @@ function initApp() {
     const plotW = chartContainer.clientWidth - getPriceScaleWidth();
     if (mx < 0 || mx > plotW) return null;
 
-    // 優先檢查 measure 標籤框拖曳（即使尚未選取也能直接拖曳標籤位置）
     for (let i = cloudShapes.length - 1; i >= 0; i--) {
       const s = cloudShapes[i];
       if (s.type === 'measure') {
@@ -1653,25 +1984,25 @@ function initApp() {
       const items = MA_CONFIG
         .filter(c => ind.ma[c.period] !== undefined)
         .map(c => `<span style="color:${c.color}">${c.label}:${ind.ma[c.period]}</span>`);
-      if (items.length) maHtml = `<br/>${items.join('  ')}`;
+      if (items.length) maHtml = `<br/>${items.join('  ')}`;
     }
 
     let bbHtml = '';
     if (ind?.bb && toggleBb.checked) {
-      bbHtml = `  |  <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} <span style="color:#ef5350">中:${ind.bb.mid}</span> 下:${ind.bb.low}</span>`;
+      bbHtml = `  |  <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} <span style="color:#ef5350">中:${ind.bb.mid}</span> 下:${ind.bb.low}</span>`;
     }
 
     const metricsHtml =
       `<br/>` +
-      `<span style="color:#ffd54f">實體K%:${m.bodyPct}</span>  ` +
-      `<span style="color:#81d4fa">影線占比:${m.shadowRatio}</span>  ` +
-      `<span style="color:#ce93d8">高低差%:${m.rangePct}</span>  ` +
+      `<span style="color:#ffd54f">實體K%:${m.bodyPct}</span>  ` +
+      `<span style="color:#81d4fa">影線占比:${m.shadowRatio}</span>  ` +
+      `<span style="color:#ce93d8">高低差%:${m.rangePct}</span>  ` +
       `<span style="color:#a5d6a7">上下影線比:${m.upperLowerShadowRatio}</span>`;
 
     ohlcLegend.innerHTML =
-      `<strong style="color:#fff">${currentName} (${currentSymbol})</strong>  時間: ${fmtTime(bar.time)}  ` +
-      `開:<span style="color:${clr}">${bar.open}</span>  高:<span style="color:${clr}">${bar.high}</span>  ` +
-      `低:<span style="color:${clr}">${bar.low}</span>  收:<span style="color:${clr}">${bar.close}</span>` +
+      `<strong style="color:#fff">${currentName} (${currentSymbol})</strong>  時間: ${fmtTime(bar.time)}  ` +
+      `開:<span style="color:${clr}">${bar.open}</span>  高:<span style="color:${clr}">${bar.high}</span>  ` +
+      `低:<span style="color:${clr}">${bar.low}</span>  收:<span style="color:${clr}">${bar.close}</span>` +
       metricsHtml + maHtml + bbHtml;
 
     let volMaHtml = '';
@@ -1679,10 +2010,10 @@ function initApp() {
       const vItems = VOL_MA_CONFIG
         .filter(c => ind.volMa[c.period] !== undefined)
         .map(c => `<span style="color:${c.color}">${c.label}:${fmtVol(ind.volMa[c.period])}</span>`);
-      if (vItems.length) volMaHtml = `  |  ${vItems.join('  ')}`;
+      if (vItems.length) volMaHtml = `  |  ${vItems.join('  ')}`;
     }
 
-    volLegend.innerHTML = `時間: ${fmtTime(bar.time)}  |  成交量: <strong style="color:${clr}">${fmtVol(bar.volume)}</strong>${volMaHtml}`;
+    volLegend.innerHTML = `時間: ${fmtTime(bar.time)}  |  成交量: <strong style="color:${clr}">${fmtVol(bar.volume)}</strong>${volMaHtml}`;
   }
 
   function renderAllSeries(candles, fitView = false) {
@@ -1815,9 +2146,35 @@ function initApp() {
     syncingCross = false;
   });
 
-  db.collection('user_settings').doc('watchlist_v2').onSnapshot(doc => {
-    favMap = doc.exists ? (doc.data().items || {}) : {};
-    favGroup.innerHTML = Object.entries(favMap).map(([sym, name]) => `<option value="${sym}">⭐ ${name} (${sym})</option>`).join('');
+  // 雲端同步自選分類（若雲端尚無資料，自動併入舊版 watchlist_v2 與預設 14 檔美國巨頭並上傳）
+  db.collection('user_settings').doc('watchlist_groups_v1').onSnapshot(async doc => {
+    if (doc.exists && Array.isArray(doc.data().groups) && doc.data().groups.length > 0) {
+      watchlistGroups = doc.data().groups;
+      favMap = getFlatFavMap();
+      saveLocalWatchlist();
+      renderWatchlistDropdown();
+      if (watchlistBackdrop?.classList.contains('open')) {
+        renderWatchlistManagerModal();
+      }
+      watchlistInitialized = true;
+    } else if (!watchlistInitialized) {
+      watchlistInitialized = true;
+      try {
+        const legacySnap = await db.collection('user_settings').doc('watchlist_v2').get();
+        if (legacySnap.exists && legacySnap.data().items) {
+          const legacyItems = legacySnap.data().items;
+          const extraEntries = Object.entries(legacyItems).filter(([sym]) => !findWatchlistItem(sym));
+          if (extraEntries.length > 0) {
+            watchlistGroups.push({
+              id: 'grp_legacy_migrated',
+              name: '我的自選股',
+              items: extraEntries.map(([symbol, label]) => ({ symbol, label }))
+            });
+          }
+        }
+      } catch (e) {}
+      await saveWatchlistGroups();
+    }
   });
 
   function updateStatusText() {
@@ -1877,7 +2234,12 @@ function initApp() {
       if (!silent) {
         currentSymbol = res.sym;
         lastCandles = res.data;
-        currentName = await window.MarketAPI.fetchChineseName(currentSymbol, symbolSelect, favMap);
+        const customMatch = findWatchlistItem(currentSymbol);
+        currentName = customMatch?.item?.label || await window.MarketAPI.fetchChineseName(currentSymbol, symbolSelect, favMap);
+        if (symbolSelect.querySelector(`option[value="${currentSymbol}"]`)) {
+          symbolSelect.value = currentSymbol;
+        }
+        updateFavButtonState();
         renderAllSeries(lastCandles, true);
         subscribeCloud(currentSymbol);
       } else if (res.data.length && lastCandles.length) {
@@ -2001,7 +2363,7 @@ function initApp() {
   };
 
   window.addEventListener('keydown', async e => {
-    if (textModalBackdrop.classList.contains('open')) return;
+    if (textModalBackdrop.classList.contains('open') || watchlistBackdrop?.classList.contains('open')) return;
     if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
@@ -2137,18 +2499,71 @@ function initApp() {
     };
   });
 
+  // 快速加入 / 移除自選
   favBtn.onclick = async () => {
-    const docRef = db.collection('user_settings').doc('watchlist_v2');
-    const next = { ...favMap };
-    if (next[currentSymbol]) {
-      delete next[currentSymbol];
+    const existing = findWatchlistItem(currentSymbol);
+    if (existing) {
+      existing.group.items.splice(existing.iIdx, 1);
       statusBadge.textContent = `已移除自選 ${currentName}`;
+      await saveWatchlistGroups();
     } else {
-      next[currentSymbol] = currentName;
-      statusBadge.textContent = `⭐ 已收藏 ${currentName} (${currentSymbol})`;
+      if (watchlistGroups.length === 0) {
+        watchlistGroups.push({ id: 'grp_default', name: '預設自選', items: [] });
+      }
+      const customLabel = prompt(`加入「${currentSymbol}」到「${watchlistGroups[0].name}」，請確認顯示名稱：`, currentName);
+      if (customLabel === null) return;
+      const finalLabel = customLabel.trim() || currentName;
+      watchlistGroups[0].items.push({ symbol: currentSymbol, label: finalLabel });
+      currentName = finalLabel;
+      if (lastCandles.length) updateLegends(lastCandles.at(-1));
+      statusBadge.textContent = `⭐ 已收藏 ${finalLabel} (${currentSymbol})`;
+      await saveWatchlistGroups();
     }
-    await docRef.set({ items: next });
   };
+
+  // 自選管理視窗控制
+  if (manageFavBtn && watchlistBackdrop) {
+    manageFavBtn.onclick = () => {
+      renderWatchlistManagerModal();
+      watchlistBackdrop.classList.add('open');
+    };
+  }
+  if (closeWlBtn && watchlistBackdrop) {
+    closeWlBtn.onclick = () => watchlistBackdrop.classList.remove('open');
+  }
+  if (watchlistBackdrop) {
+    watchlistBackdrop.addEventListener('click', e => {
+      if (e.target === watchlistBackdrop) watchlistBackdrop.classList.remove('open');
+    });
+  }
+  if (wlAddGroupBtn && wlNewGroupInput) {
+    wlAddGroupBtn.onclick = async () => {
+      const name = wlNewGroupInput.value.trim();
+      if (!name) return;
+      watchlistGroups.push({ id: 'grp_' + Date.now(), name, items: [] });
+      wlNewGroupInput.value = '';
+      await saveWatchlistGroups();
+    };
+  }
+  if (wlAddItemBtn && wlAddSymInput && wlTargetGroupSelect) {
+    wlAddItemBtn.onclick = async () => {
+      const sym = normalizeSymbolCode(wlAddSymInput.value);
+      if (!sym) return;
+      const label = (wlAddNameInput && wlAddNameInput.value.trim()) || sym;
+      const targetGrp = watchlistGroups.find(g => g.id === wlTargetGroupSelect.value) || watchlistGroups[0];
+      if (!targetGrp) return;
+
+      const dup = findWatchlistItem(sym);
+      if (dup) {
+        alert(`${sym} 已存在於「${dup.group.name}」中，如需移動請在下方列表切換族群。`);
+        return;
+      }
+      targetGrp.items.push({ symbol: sym, label });
+      wlAddSymInput.value = '';
+      if (wlAddNameInput) wlAddNameInput.value = '';
+      await saveWatchlistGroups();
+    };
+  }
 
   symbolSelect.onchange = e => switchSymbol(e.target.value);
   intervalSelect.onchange = e => {
