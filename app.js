@@ -52,14 +52,21 @@ function initApp() {
   const symbolSelect = document.getElementById('symbol-select'), favGroup = document.getElementById('fav-group');
   const intervalSelect = document.getElementById('interval-select'), customInput = document.getElementById('custom-symbol'), searchBtn = document.getElementById('search-btn');
   const favBtn = document.getElementById('fav-btn'), colorSelect = document.getElementById('color-select'), customColorInput = document.getElementById('custom-color');
+  const lineWidthSelect = document.getElementById('line-width-select');
   const drawToolSelect = document.getElementById('draw-tool-select'), drawBtn = document.getElementById('draw-btn');
   const rectRatiosInput = document.getElementById('rect-ratios');
   const deleteSelectedBtn = document.getElementById('delete-selected-btn'), manageListBtn = document.getElementById('manage-list-btn'), clearBtn = document.getElementById('clear-lines-btn');
   const drawingsPanel = document.getElementById('drawings-panel'), closePanelBtn = document.getElementById('close-panel-btn');
   const drawingsListEl = document.getElementById('drawings-list'), delCheckedBtn = document.getElementById('del-checked-btn');
   const toggleMa = document.getElementById('toggle-ma'), toggleBb = document.getElementById('toggle-bb'), toggleDeduct = document.getElementById('toggle-deduct');
+  const textModalBackdrop = document.getElementById('text-modal-backdrop');
+  const textModalTitle = document.getElementById('text-modal-title');
+  const noteTextarea = document.getElementById('note-textarea');
+  const noteCancelBtn = document.getElementById('note-cancel-btn');
+  const noteConfirmBtn = document.getElementById('note-confirm-btn');
 
   let isDrawMode = false, pendingPoint = null, hoverPoint = null;
+  let noteModalState = null; // { mode: 'create' | 'edit', p1?, p2?, shapeIndex? }
   let priceLines = [], cloudLines = [], cloudShapes = [];
   let selectedTarget = null;
   let hoveredTarget = null;
@@ -74,6 +81,98 @@ function initApp() {
 
   const isMobile = () => window.innerWidth <= 768;
   const getPriceScaleWidth = () => (isMobile() ? 58 : 80);
+
+  function getActiveLineWidth() {
+    const w = Number(lineWidthSelect?.value);
+    return (!Number.isNaN(w) && w >= 1 && w <= 10) ? w : 2;
+  }
+
+  function openCreateNoteModal(p1, p2) {
+    noteModalState = { mode: 'create', p1, p2 };
+    textModalTitle.textContent = '💬 新增文字 / 數字註記';
+    noteConfirmBtn.textContent = '確定加入';
+    noteTextarea.value = '';
+    textModalBackdrop.classList.add('open');
+    setTimeout(() => noteTextarea.focus(), 20);
+  }
+
+  function openEditNoteModal(shapeIndex) {
+    const shape = cloudShapes[shapeIndex];
+    if (!shape || shape.type !== 'textBox') return;
+    noteModalState = { mode: 'edit', shapeIndex };
+    textModalTitle.textContent = '✏️ 編輯文字 / 數字註記';
+    noteConfirmBtn.textContent = '儲存修改';
+    noteTextarea.value = shape.text ?? '';
+    textModalBackdrop.classList.add('open');
+    setTimeout(() => {
+      noteTextarea.focus();
+      noteTextarea.select();
+    }, 20);
+  }
+
+  function closeNoteModal() {
+    textModalBackdrop.classList.remove('open');
+    noteModalState = null;
+  }
+
+  noteCancelBtn.onclick = () => closeNoteModal();
+
+  noteConfirmBtn.onclick = async () => {
+    if (!noteModalState) return;
+    const text = noteTextarea.value.trim();
+    const state = { ...noteModalState };
+    closeNoteModal();
+
+    const docRef = db.collection('chart_drawings').doc(encodeURIComponent(currentSymbol));
+
+    if (state.mode === 'create') {
+      if (!text) return;
+      const color = getActiveColor();
+      const lineWidth = getActiveLineWidth();
+      await docRef.set({
+        shapes: firebase.firestore.FieldValue.arrayUnion({
+          id: Date.now(),
+          type: 'textBox',
+          p1: state.p1,
+          p2: state.p2,
+          text,
+          color,
+          lineWidth
+        })
+      }, { merge: true });
+      updateStatusText();
+    } else if (state.mode === 'edit') {
+      const targetShape = cloudShapes[state.shapeIndex];
+      if (!targetShape) return;
+      if (!text) {
+        const nextShapes = cloudShapes.filter((_, i) => i !== state.shapeIndex);
+        if (selectedTarget?.kind === 'shape' && selectedTarget.index === state.shapeIndex) {
+          selectedTarget = null;
+          deleteSelectedBtn.disabled = true;
+        }
+        await docRef.set({ shapes: nextShapes }, { merge: true });
+      } else {
+        const nextShapes = cloudShapes.map((s, i) =>
+          i === state.shapeIndex ? { ...s, text } : s
+        );
+        cloudShapes = nextShapes;
+        renderDrawings();
+        renderDrawingsList();
+        await docRef.set({ shapes: nextShapes }, { merge: true });
+      }
+      updateStatusText();
+    }
+  };
+
+  noteTextarea.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      noteConfirmBtn.click();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeNoteModal();
+    }
+  });
 
   const baseOpts = {
     autoSize: false,
@@ -682,7 +781,7 @@ function initApp() {
           const p1 = pointToPixel(s.p1), p2 = pointToPixel(s.p2);
           if (p1 && Math.hypot(mx - p1.x, my - p1.y) <= handleTol) return { target: selectedTarget, mode: 'p1' };
           if (p2 && Math.hypot(mx - p2.x, my - p2.y) <= handleTol) return { target: selectedTarget, mode: 'p2' };
-        } else if (s.type === 'rect') {
+        } else if (s.type === 'rect' || s.type === 'textBox') {
           const p1 = pointToPixel(s.p1), p2 = pointToPixel(s.p2);
           if (p1 && Math.hypot(mx - p1.x, my - p1.y) <= handleTol) return { target: selectedTarget, mode: 'p1' };
           if (p2 && Math.hypot(mx - p2.x, my - p2.y) <= handleTol) return { target: selectedTarget, mode: 'p2' };
@@ -706,13 +805,23 @@ function initApp() {
       } else if (s.type === 'trend' || s.type === 'ray') {
         const p1 = pointToPixel(s.p1), p2 = pointToPixel(s.p2);
         if (p1 && p2) {
-          let endX = p2.x, endY = p2.y;
-          if (s.type === 'ray' && Math.abs(p2.x - p1.x) > 0.5) {
-            const slope = (p2.y - p1.y) / (p2.x - p1.x);
-            endX = p2.x >= p1.x ? plotW : 0;
-            endY = p1.y + slope * (endX - p1.x);
+          let segStartX = p1.x, segStartY = p1.y, segEndX = p2.x, segEndY = p2.y;
+          if (s.type === 'ray' && (Math.abs(p2.x - p1.x) > 0.5 || Math.abs(p2.y - p1.y) > 0.5)) {
+            if (Math.abs(p2.x - p1.x) > 0.5) {
+              const slope = (p2.y - p1.y) / (p2.x - p1.x);
+              segStartX = 0;
+              segStartY = p1.y + slope * (0 - p1.x);
+              segEndX = plotW;
+              segEndY = p1.y + slope * (plotW - p1.x);
+            } else {
+              const h = chartContainer.clientHeight;
+              segStartX = p1.x;
+              segStartY = 0;
+              segEndX = p1.x;
+              segEndY = h;
+            }
           }
-          if (distToSegment(mx, my, p1.x, p1.y, endX, endY) <= lineTol) {
+          if (distToSegment(mx, my, segStartX, segStartY, segEndX, segEndY) <= lineTol) {
             return { target: { kind: 'shape', index: i }, mode: 'move' };
           }
         }
@@ -725,7 +834,7 @@ function initApp() {
           const norm = ((mx - cx) ** 2) / (rx ** 2) + ((my - cy) ** 2) / (ry ** 2);
           if (norm <= 1.25) return { target: { kind: 'shape', index: i }, mode: 'move' };
         }
-      } else if (s.type === 'rect') {
+      } else if (s.type === 'rect' || s.type === 'textBox') {
         const p1 = pointToPixel(s.p1), p2 = pointToPixel(s.p2);
         if (p1 && p2) {
           const left = Math.min(p1.x, p2.x), right = Math.max(p1.x, p2.x);
@@ -783,6 +892,7 @@ function initApp() {
 
   function drawSingleShape(shape, isPreview = false, isHighlighted = false) {
     const color = shape.color || '#2962ff';
+    const baseWidth = Number(shape.lineWidth) || 2;
     const w = chartContainer.clientWidth - getPriceScaleWidth();
     const h = chartContainer.clientHeight;
     drawCtx.save();
@@ -791,7 +901,7 @@ function initApp() {
     drawCtx.clip();
 
     drawCtx.strokeStyle = color;
-    drawCtx.lineWidth = isHighlighted ? 3.2 : 1.8;
+    drawCtx.lineWidth = isHighlighted ? baseWidth + 1.5 : baseWidth;
     if (isHighlighted) {
       drawCtx.shadowColor = color;
       drawCtx.shadowBlur = 8;
@@ -815,14 +925,23 @@ function initApp() {
       const p1 = pointToPixel(shape.p1);
       const p2 = pointToPixel(shape.p2);
       if (p1 && p2) {
-        let endX = p2.x, endY = p2.y;
-        if (shape.type === 'ray' && Math.abs(p2.x - p1.x) > 0.5) {
-          const slope = (p2.y - p1.y) / (p2.x - p1.x);
-          endX = p2.x >= p1.x ? w : 0;
-          endY = p1.y + slope * (endX - p1.x);
+        let startX = p1.x, startY = p1.y, endX = p2.x, endY = p2.y;
+        if (shape.type === 'ray' && (Math.abs(p2.x - p1.x) > 0.5 || Math.abs(p2.y - p1.y) > 0.5)) {
+          if (Math.abs(p2.x - p1.x) > 0.5) {
+            const slope = (p2.y - p1.y) / (p2.x - p1.x);
+            startX = 0;
+            startY = p1.y + slope * (0 - p1.x);
+            endX = w;
+            endY = p1.y + slope * (w - p1.x);
+          } else {
+            startX = p1.x;
+            startY = 0;
+            endX = p1.x;
+            endY = h;
+          }
         }
         drawCtx.beginPath();
-        drawCtx.moveTo(p1.x, p1.y);
+        drawCtx.moveTo(startX, startY);
         drawCtx.lineTo(endX, endY);
         drawCtx.stroke();
 
@@ -830,7 +949,7 @@ function initApp() {
         drawCtx.shadowBlur = 0;
         [p1, p2].forEach(pt => {
           drawCtx.beginPath();
-          drawCtx.arc(pt.x, pt.y, isHighlighted ? 5.5 : 3.5, 0, Math.PI * 2);
+          drawCtx.arc(pt.x, pt.y, isHighlighted ? 5.5 : Math.max(3.5, baseWidth + 1.5), 0, Math.PI * 2);
           drawCtx.fillStyle = isHighlighted ? '#fff' : color;
           drawCtx.fill();
           if (isHighlighted) {
@@ -898,6 +1017,61 @@ function initApp() {
             drawTag(`${r}x : ${targetPrice}`, right - 4, py, color, 'right');
           }
         });
+        if (isHighlighted) {
+          drawHandle(p1, color);
+          drawHandle(p2, color);
+        }
+      }
+    } else if (shape.type === 'textBox') {
+      const p1 = pointToPixel(shape.p1);
+      const p2 = pointToPixel(shape.p2);
+      if (p1 && p2) {
+        const left = Math.min(p1.x, p2.x);
+        const right = Math.max(p1.x, p2.x);
+        const top = Math.min(p1.y, p2.y);
+        const bottom = Math.max(p1.y, p2.y);
+        const boxW = Math.max(24, right - left);
+        const boxH = Math.max(20, bottom - top);
+
+        drawCtx.fillStyle = isPreview ? 'rgba(19, 23, 34, 0.72)' : 'rgba(19, 23, 34, 0.88)';
+        drawCtx.fillRect(left, top, boxW, boxH);
+        drawCtx.strokeRect(left, top, boxW, boxH);
+
+        drawCtx.setLineDash([]);
+        drawCtx.shadowBlur = 0;
+
+        const rawText = shape.text ?? (isPreview ? '文字 / 數字註記' : '');
+        if (rawText) {
+          const fontSize = isMobile() ? 12 : 13;
+          const lineHeight = fontSize * 1.35;
+          drawCtx.font = `bold ${fontSize}px "Microsoft JhengHei", "PingFang TC", sans-serif`;
+          drawCtx.fillStyle = '#ffffff';
+          drawCtx.textBaseline = 'top';
+
+          const pad = 7;
+          const maxTextW = Math.max(12, boxW - pad * 2);
+          const wrappedLines = [];
+
+          rawText.split('\n').forEach(para => {
+            let currentLine = '';
+            for (const ch of para) {
+              const testLine = currentLine + ch;
+              if (drawCtx.measureText(testLine).width > maxTextW && currentLine.length > 0) {
+                wrappedLines.push(currentLine);
+                currentLine = ch;
+              } else {
+                currentLine = testLine;
+              }
+            }
+            wrappedLines.push(currentLine);
+          });
+
+          const maxLines = Math.max(1, Math.floor((boxH - pad * 2) / lineHeight));
+          wrappedLines.slice(0, maxLines).forEach((line, idx) => {
+            drawCtx.fillText(line, left + pad, top + pad + idx * lineHeight);
+          });
+        }
+
         if (isHighlighted) {
           drawHandle(p1, color);
           drawHandle(p2, color);
@@ -1000,6 +1174,7 @@ function initApp() {
           p1: pendingPoint,
           p2: hoverPoint,
           color: getActiveColor(),
+          lineWidth: getActiveLineWidth(),
           ratios: getRatios()
         }, true, false);
       }
@@ -1012,10 +1187,11 @@ function initApp() {
       if (!item) return;
       const target = { kind: 'line', index: idx };
       const isHighlighted = isSameTarget(selectedTarget, target) || isSameTarget(hoveredTarget, target);
+      const baseWidth = Number(item.lineWidth) || 2;
       pl.applyOptions({
         price: item.price,
         color: item.color || '#2962ff',
-        lineWidth: isHighlighted ? 4 : 2,
+        lineWidth: isHighlighted ? Math.min(4, baseWidth + 1.5) : Math.min(4, baseWidth),
         title: isHighlighted ? '★已選取' : '雲端線'
       });
     });
@@ -1024,17 +1200,22 @@ function initApp() {
   function setSelectedTarget(target) {
     selectedTarget = target;
     deleteSelectedBtn.disabled = !selectedTarget;
-    syncPriceLinesStyle();
-    renderDrawings();
-    renderDrawingsList();
-    updateStatusText();
 
-    if (selectedTarget?.kind === 'shape') {
+    if (selectedTarget?.kind === 'line') {
+      const l = cloudLines[selectedTarget.index];
+      if (l?.lineWidth) lineWidthSelect.value = String(l.lineWidth);
+    } else if (selectedTarget?.kind === 'shape') {
       const s = cloudShapes[selectedTarget.index];
+      if (s?.lineWidth) lineWidthSelect.value = String(s.lineWidth);
       if (s?.type === 'rect' && Array.isArray(s.ratios)) {
         rectRatiosInput.value = s.ratios.join(', ');
       }
     }
+
+    syncPriceLinesStyle();
+    renderDrawings();
+    renderDrawingsList();
+    updateStatusText();
   }
 
   function applyDragAtPixel(mx, my) {
@@ -1147,6 +1328,23 @@ function initApp() {
     }
   });
 
+  chartContainer.addEventListener('dblclick', e => {
+    if (isDrawMode) return;
+    const rect = chartContainer.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const hit = hitTestWithDragMode(mx, my);
+    if (hit?.target?.kind === 'shape') {
+      const shape = cloudShapes[hit.target.index];
+      if (shape?.type === 'textBox') {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelectedTarget(hit.target);
+        openEditNoteModal(hit.target.index);
+      }
+    }
+  });
+
   async function deleteTarget(target) {
     if (!target) return;
     const docRef = db.collection('chart_drawings').doc(encodeURIComponent(currentSymbol));
@@ -1166,19 +1364,24 @@ function initApp() {
   const SHAPE_LABELS = {
     vline: '垂直切線',
     trend: '兩點切線',
-    ray: '兩點延長切線',
+    ray: '兩點雙向延長切線',
     ellipse: '橢圓形',
-    rect: '四方形(倍數)'
+    rect: '四方形(倍數)',
+    textBox: '註記框'
   };
 
   function describeItem(kind, item) {
     if (kind === 'line') {
-      return `水平切線 @ ${item.price}`;
+      return `水平切線 @ ${item.price} (${item.lineWidth || 2}px)`;
     }
     const name = SHAPE_LABELS[item.type] || item.type;
     if (item.type === 'vline') {
       const tStr = item.p1?.time ? fmtTime(item.p1.time) : `idx:${Math.round(item.p1?.logical || 0)}`;
       return `${name} (${tStr})`;
+    }
+    if (item.type === 'textBox') {
+      const preview = (item.text || '').replace(/\n+/g, ' ').slice(0, 14);
+      return `${name}「${preview}」`;
     }
     return `${name} (${item.p1?.price} → ${item.p2?.price})`;
   }
@@ -1213,6 +1416,15 @@ function initApp() {
       row.onclick = e => {
         if (e.target.classList.contains('batch-chk') || e.target.classList.contains('item-del-btn')) return;
         setSelectedTarget({ kind: row.dataset.kind, index: Number(row.dataset.index) });
+      };
+      row.ondblclick = e => {
+        if (e.target.classList.contains('batch-chk') || e.target.classList.contains('item-del-btn')) return;
+        const kind = row.dataset.kind;
+        const idx = Number(row.dataset.index);
+        if (kind === 'shape' && cloudShapes[idx]?.type === 'textBox') {
+          setSelectedTarget({ kind, index: idx });
+          openEditNoteModal(idx);
+        }
       };
     });
 
@@ -1524,7 +1736,7 @@ function initApp() {
       cloudLines.forEach(item => priceLines.push(candleSeries.createPriceLine({
         price: item.price,
         color: item.color || '#2962ff',
-        lineWidth: 2,
+        lineWidth: Math.min(4, Number(item.lineWidth) || 2),
         axisLabelVisible: true,
         title: '雲端線'
       })));
@@ -1598,6 +1810,19 @@ function initApp() {
     }
   }
 
+  async function applyLineWidthChange(newWidth) {
+    renderDrawings();
+    if (!selectedTarget) return;
+    const docRef = db.collection('chart_drawings').doc(encodeURIComponent(currentSymbol));
+    if (selectedTarget.kind === 'line') {
+      const nextLines = cloudLines.map((l, i) => i === selectedTarget.index ? { ...l, lineWidth: newWidth } : l);
+      await docRef.set({ lines: nextLines }, { merge: true });
+    } else {
+      const nextShapes = cloudShapes.map((s, i) => i === selectedTarget.index ? { ...s, lineWidth: newWidth } : s);
+      await docRef.set({ shapes: nextShapes }, { merge: true });
+    }
+  }
+
   colorSelect.onchange = async () => {
     customColorInput.value = colorSelect.value;
     await applyColorChange(colorSelect.value);
@@ -1606,6 +1831,10 @@ function initApp() {
     await applyColorChange(customColorInput.value);
   };
   customColorInput.oninput = () => renderDrawings();
+
+  lineWidthSelect.onchange = async () => {
+    await applyLineWidthChange(getActiveLineWidth());
+  };
 
   async function applyNewRatiosToRects() {
     const ratios = getRatios();
@@ -1659,6 +1888,7 @@ function initApp() {
   };
 
   window.addEventListener('keydown', async e => {
+    if (textModalBackdrop.classList.contains('open')) return;
     if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
@@ -1700,6 +1930,7 @@ function initApp() {
 
     const tool = drawToolSelect.value;
     const color = getActiveColor();
+    const lineWidth = getActiveLineWidth();
     const docRef = db.collection('chart_drawings').doc(encodeURIComponent(currentSymbol));
 
     if (tool === 'hline') {
@@ -1710,7 +1941,8 @@ function initApp() {
         await docRef.set({
           lines: firebase.firestore.FieldValue.arrayUnion({
             price: Number(price.toFixed(2)),
-            color
+            color,
+            lineWidth
           })
         }, { merge: true });
         updateStatusText();
@@ -1729,7 +1961,8 @@ function initApp() {
           id: Date.now(),
           type: 'vline',
           p1: pt,
-          color
+          color,
+          lineWidth
         })
       }, { merge: true });
       updateStatusText();
@@ -1741,24 +1974,34 @@ function initApp() {
       hoverPoint = pt;
       updateStatusText();
     } else {
-      const shape = {
-        id: Date.now(),
-        type: tool,
-        p1: pendingPoint,
-        p2: pt,
-        color
-      };
-      if (tool === 'rect') {
-        shape.ratios = getRatios();
-      }
+      const p1 = pendingPoint;
+      const p2 = pt;
       isDrawMode = false;
       pendingPoint = null;
       hoverPoint = null;
       drawBtn.classList.remove('active');
+      renderDrawings();
+      updateStatusText();
+
+      if (tool === 'textBox') {
+        openCreateNoteModal(p1, p2);
+        return;
+      }
+
+      const shape = {
+        id: Date.now(),
+        type: tool,
+        p1,
+        p2,
+        color,
+        lineWidth
+      };
+      if (tool === 'rect') {
+        shape.ratios = getRatios();
+      }
       await docRef.set({
         shapes: firebase.firestore.FieldValue.arrayUnion(shape)
       }, { merge: true });
-      updateStatusText();
     }
   });
 
