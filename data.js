@@ -109,7 +109,6 @@ window.MarketAPI = {
     const bbUpper = [], bbMid = [], bbLower = [];
     const byTime = new Map();
 
-    let closeSum = 0;
     const prefixClose = [0];
     const prefixVol = [0];
     for (let i = 0; i < candles.length; i++) {
@@ -121,7 +120,6 @@ window.MarketAPI = {
       const t = candles[i].time;
       const info = { ma: {}, volMa: {}, bb: null };
 
-      // 價格均線 MA3, MA6, MA18, MA60, MA120, MA240
       for (const p of maPeriods) {
         if (i >= p - 1) {
           const val = Number(((prefixClose[i + 1] - prefixClose[i + 1 - p]) / p).toFixed(2));
@@ -130,7 +128,6 @@ window.MarketAPI = {
         }
       }
 
-      // 成交量均線 MA5, MA10
       for (const p of volPeriods) {
         if (i >= p - 1) {
           const val = Math.round((prefixVol[i + 1] - prefixVol[i + 1 - p]) / p);
@@ -139,7 +136,6 @@ window.MarketAPI = {
         }
       }
 
-      // 布林通道 (20期, 上下2倍標準差)
       if (i >= 19) {
         const mean = (prefixClose[i + 1] - prefixClose[i - 19]) / 20;
         let sqDiffSum = 0;
