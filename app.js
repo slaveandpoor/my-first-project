@@ -70,7 +70,7 @@ function initApp() {
   let subDataMap = new Map();
   let keyboardBarIndex = -1;
   let isPaneResizing = false;
-  let customPaneHeights = null; // { main, vol, sub }
+  let customPaneHeights = null;
 
   const isMobile = () => window.innerWidth <= 768;
   const getPriceScaleWidth = () => (isMobile() ? 58 : 80);
@@ -312,8 +312,8 @@ function initApp() {
     });
   });
 
-  const  = {
-    color: 'rgba(144, 202, 249, 0.65)',
+  const bbOpts = {
+    color: '#2962ff',
     lineWidth: 1.5,
     lineStyle: LightweightCharts.LineStyle.Solid,
     priceLineVisible: false,
@@ -321,7 +321,11 @@ function initApp() {
     crosshairMarkerVisible: false
   };
   const bbUpperSeries = chart.addLineSeries(bbOpts);
-  const bbMidSeries = chart.addLineSeries({ ...bbOpts, color: 'rgba(144, 202, 249, 0.45)', lineStyle: LightweightCharts.LineStyle.Dotted });
+  const bbMidSeries = chart.addLineSeries({
+    ...bbOpts,
+    color: '#42a5f5',
+    lineWidth: 1.2
+  });
   const bbLowerSeries = chart.addLineSeries(bbOpts);
 
   const VOL_MA_CONFIG = [
@@ -339,7 +343,6 @@ function initApp() {
     });
   });
 
-  // 逐根 K 棒額外計算指標
   function calcCandleMetrics(bar) {
     const o = Number(bar.open);
     const h = Number(bar.high);
@@ -348,13 +351,8 @@ function initApp() {
     const fmtDec = (n, digits) => Number(n.toFixed(digits)).toFixed(digits);
     const fmtPct = n => `${Number((n * 100).toFixed(2))}%`;
 
-    // 1. 實體K百分比: (收-開)/開
     const bodyPct = o !== 0 ? fmtPct((c - o) / o) : 'X';
 
-    // 2. 影線占比（小數點顯示，取到小數點第 2 位）:
-    //    收-開>0 ((高-收)+(開-低))/(高-低)
-    //    收-開<0 ((高-開)+(收-低))/(高-低)
-    //    收-開=0 X
     let shadowRatio = 'X';
     const diffCO = c - o;
     const rangeHL = h - l;
@@ -364,15 +362,8 @@ function initApp() {
       shadowRatio = fmtDec(((h - o) + (c - l)) / rangeHL, 2);
     }
 
-    // 3. 高低差百分比: (高-低)/開
     const rangePct = o !== 0 ? fmtPct((h - l) / o) : 'X';
 
-    // 4. 上下影線比（取到小數點第 1 位）:
-    //    收-開>0 且 (高-收)>(開-低) 則 (高-收)/(開-低)
-    //    收-開>0 且 (高-收)=<(開-低) 則 (開-低)/(高-收)
-    //    收-開=<0 且 (高-開)>(收-低) 則 (高-開)/(收-低)
-    //    收-開=<0 且 (高-開)=<(收-低) 則 (收-低)/(高-開)
-    //    若分母為0顯示X
     let upperLowerShadowRatio = 'X';
     if (diffCO > 0) {
       const a = h - c;
