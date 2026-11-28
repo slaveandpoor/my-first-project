@@ -80,7 +80,7 @@ function initApp() {
   const noteConfirmBtn = document.getElementById('note-confirm-btn');
 
   // ===== 自訂分類族群、排序、命名自選名單（下拉選單完全由自選名單呈現） =====
-  const DEFAULT_WATCHLIST_GROUPS = [
+const DEFAULT_WATCHLIST_GROUPS = [
     {
       id: 'grp_us_giants',
       name: '🇺🇸 美國巨頭',
@@ -102,16 +102,36 @@ function initApp() {
       ]
     },
     {
-      id: 'grp_global_indices',
-      name: '🌐 全球股票指數',
+      id: 'grp_tw_market',
+      name: '🇹🇼 台灣指數與熱門股',
       items: [
         { symbol: '^TWII', label: '台灣加權指數' },
         { symbol: '2330.TW', label: '台積電' },
+        { symbol: '0050.TW', label: '元大台灣50' },
+        { symbol: '00878.TW', label: '國泰永續高股息' },
+        { symbol: '8069.TWO', label: '元太' },
+        { symbol: '5347.TWO', label: '世界' },
+        { symbol: '4958.TW', label: '臻鼎-KY' }
+      ]
+    },
+    {
+      id: 'grp_us_market',
+      name: '🇺🇸 美國指數與熱門股',
+      items: [
         { symbol: '^GSPC', label: '標普 500' },
         { symbol: '^IXIC', label: '那斯達克綜合' },
         { symbol: '^DJI', label: '道瓊工業' },
         { symbol: '^SOX', label: '費城半導體' },
         { symbol: '^VIX', label: 'VIX 恐慌指數' },
+        { symbol: 'NVDA', label: 'NVIDIA' },
+        { symbol: 'SPY', label: 'SPY ETF' },
+        { symbol: 'QQQ', label: 'QQQ ETF' }
+      ]
+    },
+    {
+      id: 'grp_asia_eu_indices',
+      name: '🌏 亞歐全球主要指數',
+      items: [
         { symbol: '^N225', label: '日本日經 225' },
         { symbol: '^KS11', label: '韓國 KOSPI' },
         { symbol: '^HSI', label: '香港恆生指數' },
@@ -119,6 +139,29 @@ function initApp() {
         { symbol: '^GDAXI', label: '德國 DAX' },
         { symbol: '^FTSE', label: '英國富時 100' },
         { symbol: '^FCHI', label: '法國 CAC 40' }
+      ]
+    },
+    {
+      id: 'grp_commodities_fx',
+      name: '🥇 黃金、石油與外匯匯率',
+      items: [
+        { symbol: 'GC=F', label: '黃金期貨' },
+        { symbol: 'XAUUSD=X', label: '黃金現貨' },
+        { symbol: 'GLD', label: 'SPDR 黃金 ETF' },
+        { symbol: '^HUI', label: '金礦股指數' },
+        { symbol: 'CL=F', label: '輕原油期貨' },
+        { symbol: 'BZ=F', label: '布蘭特原油' },
+        { symbol: 'TWD=X', label: '美元/台幣' },
+        { symbol: 'JPY=X', label: '美元/日圓' },
+        { symbol: 'JPYTWD=X', label: '日圓/台幣 相對匯率' }
+      ]
+    },
+    {
+      id: 'grp_crypto',
+      name: '🪙 加密貨幣',
+      items: [
+        { symbol: 'BTCUSDT', label: 'BTC / USDT' },
+        { symbol: 'ETHUSDT', label: 'ETH / USDT' }
       ]
     }
   ];
