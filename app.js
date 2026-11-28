@@ -55,13 +55,35 @@ function initApp() {
     rightPriceScale: { borderColor: '#2a2e39', minimumWidth: 80 },
     crosshair: { mode: 1 }
   };
-  const chart = LightweightCharts.createChart(chartContainer, { ...baseOpts, timeScale: { visible: false } });
+  const chart = LightweightCharts.createChart(chartContainer, {
+    ...baseOpts,
+    rightPriceScale: {
+      borderColor: '#2a2e39',
+      minimumWidth: 80,
+      scaleMargins: { top: 0.14, bottom: 0.08 }
+    },
+    timeScale: { visible: false }
+  });
   const volChart = LightweightCharts.createChart(volumeContainer, { ...baseOpts, timeScale: { borderColor: '#2a2e39', timeVisible: true } });
 
   const candleSeries = chart.addCandlestickSeries({
     upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350'
   });
   const volumeSeries = volChart.addHistogramSeries({ priceFormat: { type: 'volume' } });
+
+  // 專用隱藏底部軌道的扣抵標記序列，確保所有扣抵箭頭整齊貼齊主圖最下方
+  const deductSeries = chart.addLineSeries({
+    priceScaleId: 'deduct-scale',
+    color: 'rgba(0,0,0,0)',
+    lineWidth: 0,
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: false
+  });
+  chart.priceScale('deduct-scale').applyOptions({
+    visible: false,
+    scaleMargins: { top: 0.94, bottom: 0 }
+  });
 
   // K線移動平均線設定 (MA3, MA6, MA18, MA60, MA120, MA240)
   const MA_CONFIG = [
@@ -128,13 +150,12 @@ function initApp() {
 
   function updateDeductionMarkers() {
     if (!toggleDeduct.checked || !lastCandles.length) {
-      candleSeries.setMarkers([]);
+      deductSeries.setMarkers([]);
       return;
     }
     const len = lastCandles.length;
     const grouped = new Map();
 
-    // 計算每條均線的扣抵位置（第 len - period 根 K 棒，下一根 K 棒形成時會扣抵掉這一根）
     MA_CONFIG.forEach(cfg => {
       const idx = len - cfg.period;
       if (idx >= 0) {
@@ -154,7 +175,7 @@ function initApp() {
         text: cfgs.map(c => `${c.period}扣`).join('/')
       }));
 
-    candleSeries.setMarkers(markers);
+    deductSeries.setMarkers(markers);
   }
 
   function applyVisibility() {
@@ -207,6 +228,7 @@ function initApp() {
     indicators = window.MarketAPI.computeIndicators(candles);
 
     candleSeries.setData(candles);
+    deductSeries.setData(candles.map(d => ({ time: d.time, value: 0 })));
     volumeSeries.setData(candles.map(d => ({
       time: d.time,
       value: d.volume,
