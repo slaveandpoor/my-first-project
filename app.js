@@ -312,10 +312,10 @@ function initApp() {
     });
   });
 
-  const bbOpts = {
+  const  = {
     color: 'rgba(144, 202, 249, 0.65)',
-    lineWidth: 1,
-    lineStyle: LightweightCharts.LineStyle.Dashed,
+    lineWidth: 1.5,
+    lineStyle: LightweightCharts.LineStyle.Solid,
     priceLineVisible: false,
     lastValueVisible: false,
     crosshairMarkerVisible: false
