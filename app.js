@@ -58,9 +58,11 @@ function initApp() {
   const wlNewGroupInput = document.getElementById('wl-new-group-input');
   const wlAddGroupBtn = document.getElementById('wl-add-group-btn');
   const wlAddSymInput = document.getElementById('wl-add-sym-input');
+  const wlLookupNameBtn = document.getElementById('wl-lookup-name-btn');
   const wlAddNameInput = document.getElementById('wl-add-name-input');
   const wlTargetGroupSelect = document.getElementById('wl-target-group-select');
   const wlAddItemBtn = document.getElementById('wl-add-item-btn');
+  const wlLookupHint = document.getElementById('wl-lookup-hint');
   const wlGroupsContainer = document.getElementById('watchlist-groups-container');
 
   const colorSelect = document.getElementById('color-select'), customColorInput = document.getElementById('custom-color');
@@ -103,6 +105,7 @@ function initApp() {
   const WL_LOCAL_KEY = 'market_watchlist_groups_v1';
   let watchlistGroups = [];
   let watchlistInitialized = false;
+  let lookupSeq = 0;
 
   const cloneDefaultWatchlist = () => JSON.parse(JSON.stringify(DEFAULT_WATCHLIST_GROUPS));
   const normalizeSymbolCode = raw => {
@@ -110,6 +113,37 @@ function initApp() {
     if (/^\d{4,6}$/.test(s)) s += '.TW';
     return s;
   };
+
+  async function autoPreviewSymbolName(forceRefresh = false) {
+    if (!wlAddSymInput || !wlAddNameInput) return '';
+    const raw = wlAddSymInput.value.trim();
+    if (!raw) {
+      if (wlLookupHint) wlLookupHint.textContent = '';
+      return '';
+    }
+    const seq = ++lookupSeq;
+    const normSym = normalizeSymbolCode(raw);
+    if (forceRefresh) {
+      delete window.MarketAPI.nameCache[normSym];
+      delete window.MarketAPI.nameCache[raw.toUpperCase()];
+    }
+    if (wlLookupHint) wlLookupHint.textContent = `⏳ 正在查詢 ${normSym} 名稱...`;
+
+    const foundName = await window.MarketAPI.lookupSymbolName(raw, symbolSelect, favMap);
+    if (seq !== lookupSeq) return foundName;
+
+    if (foundName) {
+      wlAddNameInput.value = foundName;
+      if (wlLookupHint) {
+        wlLookupHint.textContent = `✅ 查詢結果：${foundName}（${normSym}）— 不改名可直接按「加入自選」，或自行修改上方名稱後再加入`;
+      }
+    } else {
+      if (wlLookupHint) {
+        wlLookupHint.textContent = `⚠️ 查無「${normSym}」名稱，可手動輸入顯示名稱後再按「加入自選」`;
+      }
+    }
+    return foundName;
+  }
 
   function getFlatFavMap() {
     const map = {};
@@ -274,7 +308,7 @@ function initApp() {
       if (!grp.items || grp.items.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'wl-empty-tip';
-        empty.textContent = '此族群目前尚無股票，可從上方輸入代號加入或由其他族群移動過來。';
+        empty.textContent = '此族群目前尚無股票，可從上方輸入代號查詢後加入，或由其他族群移動過來。';
         itemsWrap.appendChild(empty);
       } else {
         grp.items.forEach((it, iIdx) => {
@@ -2543,6 +2577,28 @@ function initApp() {
       e.stopPropagation();
     }, { passive: true });
   }
+  if (wlAddSymInput) {
+    let symInputTimer = null;
+    wlAddSymInput.addEventListener('input', () => {
+      clearTimeout(symInputTimer);
+      symInputTimer = setTimeout(() => autoPreviewSymbolName(false), 350);
+    });
+    wlAddSymInput.addEventListener('change', () => {
+      clearTimeout(symInputTimer);
+      autoPreviewSymbolName(false);
+    });
+    wlAddSymInput.addEventListener('keydown', async e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        clearTimeout(symInputTimer);
+        await autoPreviewSymbolName(false);
+        wlAddNameInput?.focus();
+      }
+    });
+  }
+  if (wlLookupNameBtn) {
+    wlLookupNameBtn.onclick = () => autoPreviewSymbolName(true);
+  }
   if (wlAddGroupBtn && wlNewGroupInput) {
     wlAddGroupBtn.onclick = async () => {
       const name = wlNewGroupInput.value.trim();
@@ -2556,7 +2612,10 @@ function initApp() {
     wlAddItemBtn.onclick = async () => {
       const sym = normalizeSymbolCode(wlAddSymInput.value);
       if (!sym) return;
-      const label = (wlAddNameInput && wlAddNameInput.value.trim()) || sym;
+      let label = wlAddNameInput ? wlAddNameInput.value.trim() : '';
+      if (!label) {
+        label = await window.MarketAPI.lookupSymbolName(wlAddSymInput.value, symbolSelect, favMap) || sym;
+      }
       const targetGrp = watchlistGroups.find(g => g.id === wlTargetGroupSelect.value) || watchlistGroups[0];
       if (!targetGrp) return;
 
@@ -2568,6 +2627,7 @@ function initApp() {
       targetGrp.items.push({ symbol: sym, label });
       wlAddSymInput.value = '';
       if (wlAddNameInput) wlAddNameInput.value = '';
+      if (wlLookupHint) wlLookupHint.textContent = `✅ 已將「${label} (${sym})」加入「${targetGrp.name}」`;
       await saveWatchlistGroups();
     };
   }
