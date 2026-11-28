@@ -60,24 +60,42 @@ function initApp() {
   let suppressNextClick = false;
   let currentSymbol = symbolSelect.value, currentName = '台積電', currentInterval = intervalSelect.value;
   let unsub = null, liveTimer = null, favMap = {}, lastCandles = [], syncingCross = false, indicators = null;
+  let keyboardBarIndex = -1;
+
+  const isMobile = () => window.innerWidth <= 768;
+  const getPriceScaleWidth = () => (isMobile() ? 58 : 80);
 
   const baseOpts = {
     autoSize: true,
-    layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
+    layout: { background: { color: '#131722' }, textColor: '#d1d4dc', fontSize: isMobile() ? 10 : 12 },
     grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
-    rightPriceScale: { borderColor: '#2a2e39', minimumWidth: 80 },
+    rightPriceScale: { borderColor: '#2a2e39', minimumWidth: getPriceScaleWidth() },
     crosshair: { mode: 1 }
   };
   const chart = LightweightCharts.createChart(chartContainer, {
     ...baseOpts,
     rightPriceScale: {
       borderColor: '#2a2e39',
-      minimumWidth: 80,
+      minimumWidth: getPriceScaleWidth(),
       scaleMargins: { top: 0.14, bottom: 0.08 }
     },
     timeScale: { visible: false }
   });
   const volChart = LightweightCharts.createChart(volumeContainer, { ...baseOpts, timeScale: { borderColor: '#2a2e39', timeVisible: true } });
+
+  function applyResponsiveChartOpts() {
+    const mw = getPriceScaleWidth();
+    const fs = isMobile() ? 10 : 12;
+    chart.applyOptions({
+      layout: { fontSize: fs },
+      rightPriceScale: { minimumWidth: mw }
+    });
+    volChart.applyOptions({
+      layout: { fontSize: fs },
+      rightPriceScale: { minimumWidth: mw }
+    });
+  }
+  window.addEventListener('resize', applyResponsiveChartOpts);
 
   const candleSeries = chart.addCandlestickSeries({
     upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350'
@@ -142,6 +160,39 @@ function initApp() {
       crosshairMarkerVisible: false
     });
   });
+
+  // ========== 鍵盤方向鍵移動至各根K棒收盤價 ==========
+  function moveCrosshairToBarClose(idx) {
+    if (!lastCandles.length) return;
+    const clamped = Math.max(0, Math.min(lastCandles.length - 1, idx));
+    keyboardBarIndex = clamped;
+    const bar = lastCandles[clamped];
+
+    // 確保目標 K 棒在可視時間範圍內
+    const logicalRange = chart.timeScale().getVisibleLogicalRange();
+    if (logicalRange) {
+      if (clamped < logicalRange.from + 1) {
+        const span = logicalRange.to - logicalRange.from;
+        const newFrom = Math.max(0, clamped - 1);
+        chart.timeScale().setVisibleLogicalRange({ from: newFrom, to: newFrom + span });
+      } else if (clamped > logicalRange.to - 1) {
+        const span = logicalRange.to - logicalRange.from;
+        const newTo = Math.min(lastCandles.length - 1, clamped + 1);
+        chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, newTo - span), to: newTo });
+      }
+    }
+
+    syncingCross = true;
+    chart.setCrosshairPosition(bar.close, bar.time, candleSeries);
+    volChart.setCrosshairPosition(bar.volume, bar.time, volumeSeries);
+    syncingCross = false;
+
+    updateLegends(bar);
+    if (isDrawMode && pendingPoint) {
+      hoverPoint = { logical: clamped, time: bar.time, price: bar.close };
+      renderDrawings();
+    }
+  }
 
   function getActiveColor() {
     return customColorInput.value || colorSelect.value || '#2962ff';
@@ -215,9 +266,9 @@ function initApp() {
   }
 
   function hitTestWithDragMode(mx, my) {
-    const handleTol = 9;
-    const lineTol = 8;
-    const plotW = chartContainer.clientWidth - 80;
+    const handleTol = isMobile() ? 14 : 9;
+    const lineTol = isMobile() ? 12 : 8;
+    const plotW = chartContainer.clientWidth - getPriceScaleWidth();
     if (mx < 0 || mx > plotW) return null;
 
     if (selectedTarget?.kind === 'shape') {
@@ -298,8 +349,8 @@ function initApp() {
   }
 
   function drawTag(text, x, y, color, align = 'left') {
-    drawCtx.font = 'bold 11px sans-serif';
-    const padX = 5, h = 16;
+    drawCtx.font = isMobile() ? 'bold 10px sans-serif' : 'bold 11px sans-serif';
+    const padX = 5, h = 15;
     const w = drawCtx.measureText(text).width + padX * 2;
     const drawX = align === 'right' ? x - w : x;
     drawCtx.fillStyle = 'rgba(19, 23, 34, 0.88)';
@@ -316,7 +367,7 @@ function initApp() {
     if (!pt) return;
     drawCtx.save();
     drawCtx.beginPath();
-    drawCtx.arc(pt.x, pt.y, 5.5, 0, Math.PI * 2);
+    drawCtx.arc(pt.x, pt.y, isMobile() ? 6.5 : 5.5, 0, Math.PI * 2);
     drawCtx.fillStyle = '#ffffff';
     drawCtx.fill();
     drawCtx.lineWidth = 2.2;
@@ -327,7 +378,7 @@ function initApp() {
 
   function drawSingleShape(shape, isPreview = false, isHighlighted = false) {
     const color = shape.color || '#2962ff';
-    const w = chartContainer.clientWidth - 80;
+    const w = chartContainer.clientWidth - getPriceScaleWidth();
     const h = chartContainer.clientHeight;
     drawCtx.save();
     drawCtx.beginPath();
@@ -782,18 +833,18 @@ function initApp() {
       const items = MA_CONFIG
         .filter(c => ind.ma[c.period] !== undefined)
         .map(c => `<span style="color:${c.color}">${c.label}:${ind.ma[c.period]}</span>`);
-      if (items.length) maHtml = `<br/>${items.join(' &nbsp;')}`;
+      if (items.length) maHtml = `<br/>${items.join('  ')}`;
     }
 
     let bbHtml = '';
     if (ind?.bb && toggleBb.checked) {
-      bbHtml = ` &nbsp;|&nbsp; <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} 中:${ind.bb.mid} 下:${ind.bb.low}</span>`;
+      bbHtml = `  |  <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} 中:${ind.bb.mid} 下:${ind.bb.low}</span>`;
     }
 
     ohlcLegend.innerHTML =
-      `<strong style="color:#fff">${currentName} (${currentSymbol})</strong> &nbsp;時間: ${fmtTime(bar.time)} &nbsp;` +
-      `開:<span style="color:${clr}">${bar.open}</span> &nbsp;高:<span style="color:${clr}">${bar.high}</span> &nbsp;` +
-      `低:<span style="color:${clr}">${bar.low}</span> &nbsp;收:<span style="color:${clr}">${bar.close}</span>` +
+      `<strong style="color:#fff">${currentName} (${currentSymbol})</strong>  時間: ${fmtTime(bar.time)}  ` +
+      `開:<span style="color:${clr}">${bar.open}</span>  高:<span style="color:${clr}">${bar.high}</span>  ` +
+      `低:<span style="color:${clr}">${bar.low}</span>  收:<span style="color:${clr}">${bar.close}</span>` +
       maHtml + bbHtml;
 
     let volMaHtml = '';
@@ -801,10 +852,10 @@ function initApp() {
       const vItems = VOL_MA_CONFIG
         .filter(c => ind.volMa[c.period] !== undefined)
         .map(c => `<span style="color:${c.color}">${c.label}:${fmtVol(ind.volMa[c.period])}</span>`);
-      if (vItems.length) volMaHtml = ` &nbsp;|&nbsp; ${vItems.join(' &nbsp;')}`;
+      if (vItems.length) volMaHtml = `  |  ${vItems.join('  ')}`;
     }
 
-    volLegend.innerHTML = `時間: ${fmtTime(bar.time)} &nbsp;|&nbsp; 成交量: <strong style="color:${clr}">${fmtVol(bar.volume)}</strong>${volMaHtml}`;
+    volLegend.innerHTML = `時間: ${fmtTime(bar.time)}  |  成交量: <strong style="color:${clr}">${fmtVol(bar.volume)}</strong>${volMaHtml}`;
   }
 
   function renderAllSeries(candles, fitView = false) {
@@ -825,7 +876,10 @@ function initApp() {
     bbLowerSeries.setData(indicators.bbLower);
 
     applyVisibility();
-    if (candles.length) updateLegends(candles.at(-1));
+    if (candles.length) {
+      keyboardBarIndex = candles.length - 1;
+      updateLegends(candles.at(-1));
+    }
     if (fitView) {
       chart.timeScale().fitContent();
       volChart.timeScale().fitContent();
@@ -834,6 +888,10 @@ function initApp() {
   }
 
   chart.subscribeCrosshairMove(p => {
+    if (p.time && lastCandles.length) {
+      const idx = lastCandles.findIndex(c => c.time === p.time);
+      if (idx !== -1) keyboardBarIndex = idx;
+    }
     if (p.point && !dragState) {
       if (isDrawMode && pendingPoint) {
         hoverPoint = pixelToPoint(p.point.x, p.point.y);
@@ -867,6 +925,10 @@ function initApp() {
   });
 
   volChart.subscribeCrosshairMove(p => {
+    if (p.time && lastCandles.length) {
+      const idx = lastCandles.findIndex(c => c.time === p.time);
+      if (idx !== -1) keyboardBarIndex = idx;
+    }
     if (syncingCross) return;
     syncingCross = true;
     const bar = p.time ? lastCandles.find(c => c.time === p.time) : null;
@@ -1050,7 +1112,15 @@ function initApp() {
 
   window.addEventListener('keydown', async e => {
     if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
-    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTarget) {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const startIdx = keyboardBarIndex >= 0 ? keyboardBarIndex : lastCandles.length - 1;
+      moveCrosshairToBarClose(startIdx - 1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      const startIdx = keyboardBarIndex >= 0 ? keyboardBarIndex : lastCandles.length - 1;
+      moveCrosshairToBarClose(startIdx + 1);
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTarget) {
       e.preventDefault();
       await deleteTarget(selectedTarget);
     } else if (e.key === 'Escape') {
