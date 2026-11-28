@@ -45,10 +45,6 @@ function initApp() {
   const resizerVolSub = document.getElementById('resizer-vol-sub');
   const drawCanvas = document.getElementById('draw-canvas');
   const drawCtx = drawCanvas.getContext('2d');
-  const volCanvas = document.getElementById('vol-canvas');
-  const volCtx = volCanvas.getContext('2d');
-  const subCanvas = document.getElementById('sub-canvas');
-  const subCtx = subCanvas.getContext('2d');
   const ohlcLegend = document.getElementById('ohlc-legend');
   const volLegend = document.getElementById('vol-legend');
   const subLegend = document.getElementById('sub-legend');
@@ -71,7 +67,6 @@ function initApp() {
   let currentSymbol = symbolSelect.value, currentName = '台積電', currentInterval = intervalSelect.value;
   let unsub = null, liveTimer = null, favMap = {}, lastCandles = [], syncingCross = false, indicators = null;
   let subDataMap = new Map();
-  let subLatestLabels = [];
   let keyboardBarIndex = -1;
 
   function setupPaneResizer(resizerEl, topPane, bottomPane) {
@@ -103,7 +98,7 @@ function initApp() {
 
       topPane.style.flex = `${newTopH} 1 0px`;
       bottomPane.style.flex = `${newBottomH} 1 0px`;
-      requestAnimationFrame(renderAllOverlays);
+      requestAnimationFrame(renderDrawings);
     };
 
     const onEnd = () => {
@@ -112,7 +107,7 @@ function initApp() {
       resizerEl.classList.remove('dragging');
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
-      requestAnimationFrame(renderAllOverlays);
+      requestAnimationFrame(renderDrawings);
     };
 
     resizerEl.addEventListener('mousedown', e => {
@@ -179,6 +174,7 @@ function initApp() {
   }
   window.addEventListener('resize', applyResponsiveChartOpts);
 
+  // 最新價格不顯示在右側座標軸，改顯示在 K 棒上
   const candleSeries = chart.addCandlestickSeries({
     upColor: '#26a69a',
     downColor: '#ef5350',
@@ -188,6 +184,7 @@ function initApp() {
     lastValueVisible: false
   });
 
+  // 附圖不顯示最新數據（座標軸與曲線內皆不顯示）
   const volumeSeries = volChart.addHistogramSeries({
     priceFormat: { type: 'volume' },
     lastValueVisible: false
@@ -298,7 +295,6 @@ function initApp() {
 
   function computeSubIndicators(candles, interval) {
     subDataMap = new Map();
-    subLatestLabels = [];
     const isMonth = interval === '1mo';
     const isWeek = interval === '1wk';
     const isDay = interval === '1d';
@@ -330,8 +326,6 @@ function initApp() {
     }
 
     const r2 = n => Number(n.toFixed(2));
-    const lastIdx = candles.length - 1;
-    const lastBar = candles[lastIdx];
 
     if (isMonth) {
       const kData = [], dData = [];
@@ -357,13 +351,6 @@ function initApp() {
       }
       kdKSeries.setData(kData);
       kdDSeries.setData(dData);
-      const latest = subDataMap.get(lastBar.time);
-      if (latest) {
-        subLatestLabels = [
-          { idx: lastIdx, time: lastBar.time, value: latest.k, text: `K:${latest.k}`, color: '#ffeb3b', yOffset: -10 },
-          { idx: lastIdx, time: lastBar.time, value: latest.d, text: `D:${latest.d}`, color: '#00e5ff', yOffset: 10 }
-        ];
-      }
     } else if (isWeek) {
       const closes = candles.map(c => c.close);
       const ma18 = calcSMA(closes, 18);
@@ -383,15 +370,6 @@ function initApp() {
       bias18Series.setData(b18Data);
       bias6Series.setData(b6Data);
       zeroRefSeries.setData(zeroData);
-      const latest = subDataMap.get(lastBar.time);
-      if (latest) {
-        if (latest.bias18 !== null) {
-          subLatestLabels.push({ idx: lastIdx, time: lastBar.time, value: latest.bias18, text: `18:${latest.bias18}%`, color: '#ff9800', yOffset: -10 });
-        }
-        if (latest.bias6 !== null) {
-          subLatestLabels.push({ idx: lastIdx, time: lastBar.time, value: latest.bias6, text: `6:${latest.bias6}%`, color: '#69f0ae', yOffset: 10 });
-        }
-      }
     } else if (isDay) {
       const closes = candles.map(c => c.close);
       const ema12 = calcEMA(closes, 12);
@@ -427,15 +405,6 @@ function initApp() {
       macdDeaSeries.setData(deaData);
       macdHistSeries.setData(histData);
       zeroRefSeries.setData(zeroData);
-      const latest = subDataMap.get(lastBar.time);
-      if (latest) {
-        if (latest.dif !== null) {
-          subLatestLabels.push({ idx: lastIdx, time: lastBar.time, value: latest.dif, text: `DIF:${latest.dif}`, color: '#ffffff', yOffset: -12 });
-        }
-        if (latest.dea !== null) {
-          subLatestLabels.push({ idx: lastIdx, time: lastBar.time, value: latest.dea, text: `MACD:${latest.dea}`, color: '#ffeb3b', yOffset: 10 });
-        }
-      }
     }
 
     if (candles.length) {
@@ -451,20 +420,20 @@ function initApp() {
     }
     if (info.mode === 'kd') {
       subLegend.innerHTML =
-        `<strong style="color:#fff">KD(9,3,3)</strong> &nbsp;` +
-        `<span style="color:#ffeb3b">K:${info.k}</span> &nbsp;` +
+        `<strong style="color:#fff">KD(9,3,3)</strong>  ` +
+        `<span style="color:#ffeb3b">K:${info.k}</span>  ` +
         `<span style="color:#00e5ff">D:${info.d}</span>`;
     } else if (info.mode === 'bias') {
       subLegend.innerHTML =
-        `<strong style="color:#fff">18-6乖離(18,6)</strong> &nbsp;` +
-        `<span style="color:#ff9800">乖離18:${info.bias18 !== null ? info.bias18 + '%' : '--'}</span> &nbsp;` +
+        `<strong style="color:#fff">18-6乖離(18,6)</strong>  ` +
+        `<span style="color:#ff9800">乖離18:${info.bias18 !== null ? info.bias18 + '%' : '--'}</span>  ` +
         `<span style="color:#69f0ae">乖離6:${info.bias6 !== null ? info.bias6 + '%' : '--'}</span>`;
     } else if (info.mode === 'macd') {
       const oscColor = (info.osc ?? 0) >= 0 ? '#26a69a' : '#ef5350';
       subLegend.innerHTML =
-        `<strong style="color:#fff">MACD(12,26,9)</strong> &nbsp;` +
-        `<span style="color:#ffffff">DIF:${info.dif ?? '--'}</span> &nbsp;` +
-        `<span style="color:#ffeb3b">MACD:${info.dea ?? '--'}</span> &nbsp;` +
+        `<strong style="color:#fff">MACD(12,26,9)</strong>  ` +
+        `<span style="color:#ffffff">DIF:${info.dif ?? '--'}</span>  ` +
+        `<span style="color:#ffeb3b">MACD:${info.dea ?? '--'}</span>  ` +
         `<span style="color:${oscColor}">OSC:${info.osc ?? '--'}</span>`;
     }
   }
@@ -518,29 +487,19 @@ function initApp() {
     return parsed.length ? parsed : [0.333, 0.5, 0.6667];
   }
 
-  function syncCanvasSize(canvasEl, ctx, containerEl) {
-    const rect = containerEl.getBoundingClientRect();
+  function resizeCanvas() {
+    const rect = chartContainer.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     const w = Math.max(1, Math.floor(rect.width));
     const h = Math.max(1, Math.floor(rect.height));
-    if (canvasEl.width !== w * dpr || canvasEl.height !== h * dpr) {
-      canvasEl.width = w * dpr;
-      canvasEl.height = h * dpr;
+    if (drawCanvas.width !== w * dpr || drawCanvas.height !== h * dpr) {
+      drawCanvas.width = w * dpr;
+      drawCanvas.height = h * dpr;
     }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    renderDrawings();
   }
-
-  function resizeAllCanvases() {
-    syncCanvasSize(drawCanvas, drawCtx, chartContainer);
-    syncCanvasSize(volCanvas, volCtx, volumeContainer);
-    if (subIndicatorContainer.style.display !== 'none') {
-      syncCanvasSize(subCanvas, subCtx, subIndicatorContainer);
-    }
-    renderAllOverlays();
-  }
-  new ResizeObserver(resizeAllCanvases).observe(chartContainer);
-  new ResizeObserver(resizeAllCanvases).observe(volumeContainer);
-  new ResizeObserver(resizeAllCanvases).observe(subIndicatorContainer);
+  new ResizeObserver(resizeCanvas).observe(chartContainer);
 
   function logicalToTime(logical) {
     if (!lastCandles.length || logical == null) return null;
@@ -670,21 +629,21 @@ function initApp() {
     return a && b && a.kind === b.kind && a.index === b.index;
   }
 
-  function drawBadgeOnCtx(ctx, text, x, y, color, align = 'left', bg = 'rgba(19, 23, 34, 0.92)') {
-    ctx.save();
-    ctx.font = isMobile() ? 'bold 10px sans-serif' : 'bold 11px sans-serif';
+  function drawTag(text, x, y, color, align = 'left') {
+    drawCtx.save();
+    drawCtx.font = isMobile() ? 'bold 10px sans-serif' : 'bold 11px sans-serif';
     const padX = 5, h = 15;
-    const w = ctx.measureText(text).width + padX * 2;
+    const w = drawCtx.measureText(text).width + padX * 2;
     const drawX = align === 'right' ? x - w : (align === 'center' ? x - w / 2 : x);
-    ctx.fillStyle = bg;
-    ctx.fillRect(drawX, y - h / 2, w, h);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(drawX, y - h / 2, w, h);
-    ctx.fillStyle = color;
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, drawX + padX, y);
-    ctx.restore();
+    drawCtx.fillStyle = 'rgba(19, 23, 34, 0.9)';
+    drawCtx.fillRect(drawX, y - h / 2, w, h);
+    drawCtx.strokeStyle = color;
+    drawCtx.lineWidth = 1;
+    drawCtx.strokeRect(drawX, y - h / 2, w, h);
+    drawCtx.fillStyle = color;
+    drawCtx.textBaseline = 'middle';
+    drawCtx.fillText(text, drawX + padX, y);
+    drawCtx.restore();
   }
 
   function drawHandle(pt, color) {
@@ -727,7 +686,7 @@ function initApp() {
         drawCtx.setLineDash([]);
         drawCtx.shadowBlur = 0;
         const label = shape.p1.time ? fmtTime(shape.p1.time) : `idx:${Math.round(shape.p1.logical)}`;
-        drawBadgeOnCtx(drawCtx, label, p1.x + 4, h - 18, color, 'left');
+        drawTag(label, p1.x + 4, h - 18, color, 'left');
         if (isHighlighted) drawHandle({ x: p1.x, y: h / 2 }, color);
       }
     } else if (shape.type === 'trend' || shape.type === 'ray') {
@@ -758,8 +717,8 @@ function initApp() {
             drawCtx.stroke();
           }
         });
-        drawBadgeOnCtx(drawCtx, `${shape.p1.price}`, p1.x + 6, p1.y - 10, color);
-        drawBadgeOnCtx(drawCtx, `${shape.p2.price}`, p2.x + 6, p2.y - 10, color);
+        drawTag(`${shape.p1.price}`, p1.x + 6, p1.y - 10, color);
+        drawTag(`${shape.p2.price}`, p2.x + 6, p2.y - 10, color);
       }
     } else if (shape.type === 'ellipse') {
       const p1 = pointToPixel(shape.p1);
@@ -795,8 +754,8 @@ function initApp() {
 
         drawCtx.setLineDash([]);
         drawCtx.shadowBlur = 0;
-        drawBadgeOnCtx(drawCtx, `起 ${shape.p1.price}`, left + 4, p1.y - 9, color);
-        drawBadgeOnCtx(drawCtx, `終 ${shape.p2.price}`, left + 4, p2.y + 9, color);
+        drawTag(`起 ${shape.p1.price}`, left + 4, p1.y - 9, color);
+        drawTag(`終 ${shape.p2.price}`, left + 4, p2.y + 9, color);
 
         const ratios = Array.isArray(shape.ratios) && shape.ratios.length ? shape.ratios : getRatios();
         const diff = shape.p2.price - shape.p1.price;
@@ -814,7 +773,7 @@ function initApp() {
             drawCtx.stroke();
             drawCtx.restore();
 
-            drawBadgeOnCtx(drawCtx, `${r}x : ${targetPrice}`, right - 4, py, color, 'right');
+            drawTag(`${r}x : ${targetPrice}`, right - 4, py, color, 'right');
           }
         });
         if (isHighlighted) {
@@ -866,7 +825,7 @@ function initApp() {
       const hy = candleSeries.priceToCoordinate(maxBar.high);
       if (hx !== null && hy !== null) {
         const clampedX = Math.max(45, Math.min(plotW - 45, hx));
-        drawBadgeOnCtx(drawCtx, `▲ ${maxBar.high}`, clampedX, Math.max(14, hy - 12), '#ef5350', 'center');
+        drawTag(`▲ ${maxBar.high}`, clampedX, Math.max(14, hy - 12), '#ef5350', 'center');
       }
     }
 
@@ -875,7 +834,7 @@ function initApp() {
       const ly = candleSeries.priceToCoordinate(minBar.low);
       if (lx !== null && ly !== null) {
         const clampedX = Math.max(45, Math.min(plotW - 45, lx));
-        drawBadgeOnCtx(drawCtx, `▼ ${minBar.low}`, clampedX, Math.min(plotH - 12, ly + 12), '#26a69a', 'center');
+        drawTag(`▼ ${minBar.low}`, clampedX, Math.min(plotH - 12, ly + 12), '#26a69a', 'center');
       }
     }
 
@@ -892,64 +851,10 @@ function initApp() {
       const align = cx > plotW - 90 ? 'right' : 'left';
       const offsetX = align === 'right' ? -7 : 7;
       const clampedY = Math.max(14, Math.min(plotH - 12, cy));
-      drawBadgeOnCtx(drawCtx, `今 ${lastBar.close}`, cx + offsetX, clampedY, clr, align);
+      drawTag(`今 ${lastBar.close}`, cx + offsetX, clampedY, clr, align);
     }
 
     drawCtx.restore();
-  }
-
-  function drawSubChartsLatestValues() {
-    const volW = volumeContainer.clientWidth - getPriceScaleWidth();
-    const volH = volumeContainer.clientHeight;
-    volCtx.clearRect(0, 0, volumeContainer.clientWidth, volH);
-
-    if (lastCandles.length) {
-      const lastIdx = lastCandles.length - 1;
-      const lastBar = lastCandles[lastIdx];
-      const vx = volChart.timeScale().logicalToCoordinate(lastIdx);
-      const vy = volumeSeries.priceToCoordinate(lastBar.volume);
-      if (vx !== null && vy !== null) {
-        volCtx.save();
-        volCtx.beginPath();
-        volCtx.rect(0, 0, Math.max(0, volW), volH);
-        volCtx.clip();
-        const clr = lastBar.close >= lastBar.open ? '#26a69a' : '#ef5350';
-        const align = vx > volW - 95 ? 'right' : 'left';
-        const offsetX = align === 'right' ? -6 : 6;
-        drawBadgeOnCtx(volCtx, fmtVol(lastBar.volume), vx + offsetX, Math.max(14, Math.min(volH - 10, vy)), clr, align);
-        volCtx.restore();
-      }
-    }
-
-    const subW = subIndicatorContainer.clientWidth - getPriceScaleWidth();
-    const subH = subIndicatorContainer.clientHeight;
-    subCtx.clearRect(0, 0, subIndicatorContainer.clientWidth, subH);
-
-    if (subIndicatorContainer.style.display !== 'none' && subLatestLabels.length) {
-      const anchorSeries = currentInterval === '1mo' ? kdKSeries : (currentInterval === '1wk' ? bias6Series : macdDifSeries);
-      subCtx.save();
-      subCtx.beginPath();
-      subCtx.rect(0, 0, Math.max(0, subW), subH);
-      subCtx.clip();
-
-      subLatestLabels.forEach(item => {
-        const sx = subChart.timeScale().logicalToCoordinate(item.idx);
-        const sy = anchorSeries.priceToCoordinate(item.value);
-        if (sx !== null && sy !== null) {
-          subCtx.beginPath();
-          subCtx.arc(sx, sy, 3.5, 0, Math.PI * 2);
-          subCtx.fillStyle = item.color;
-          subCtx.fill();
-
-          const align = sx > subW - 95 ? 'right' : 'left';
-          const offsetX = align === 'right' ? -6 : 6;
-          const drawY = Math.max(14, Math.min(subH - 10, sy + (item.yOffset || 0)));
-          drawBadgeOnCtx(subCtx, item.text, sx + offsetX, drawY, item.color, align);
-        }
-      });
-
-      subCtx.restore();
-    }
   }
 
   function renderDrawings() {
@@ -977,16 +882,6 @@ function initApp() {
         }, true, false);
       }
     }
-  }
-
-  function renderAllOverlays() {
-    syncCanvasSize(drawCanvas, drawCtx, chartContainer);
-    syncCanvasSize(volCanvas, volCtx, volumeContainer);
-    if (subIndicatorContainer.style.display !== 'none') {
-      syncCanvasSize(subCanvas, subCtx, subIndicatorContainer);
-    }
-    renderDrawings();
-    drawSubChartsLatestValues();
   }
 
   function syncPriceLinesStyle() {
@@ -1226,19 +1121,19 @@ function initApp() {
     if (!r) return;
     volChart.timeScale().setVisibleLogicalRange(r);
     if (subIndicatorContainer.style.display !== 'none') subChart.timeScale().setVisibleLogicalRange(r);
-    renderAllOverlays();
+    renderDrawings();
   });
   volChart.timeScale().subscribeVisibleLogicalRangeChange(r => {
     if (!r) return;
     chart.timeScale().setVisibleLogicalRange(r);
     if (subIndicatorContainer.style.display !== 'none') subChart.timeScale().setVisibleLogicalRange(r);
-    renderAllOverlays();
+    renderDrawings();
   });
   subChart.timeScale().subscribeVisibleLogicalRangeChange(r => {
     if (!r) return;
     chart.timeScale().setVisibleLogicalRange(r);
     volChart.timeScale().setVisibleLogicalRange(r);
-    renderAllOverlays();
+    renderDrawings();
   });
 
   const fmtTime = t => {
@@ -1303,18 +1198,18 @@ function initApp() {
       const items = MA_CONFIG
         .filter(c => ind.ma[c.period] !== undefined)
         .map(c => `<span style="color:${c.color}">${c.label}:${ind.ma[c.period]}</span>`);
-      if (items.length) maHtml = `<br/>${items.join(' &nbsp;')}`;
+      if (items.length) maHtml = `<br/>${items.join('  ')}`;
     }
 
     let bbHtml = '';
     if (ind?.bb && toggleBb.checked) {
-      bbHtml = ` &nbsp;|&nbsp; <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} 中:${ind.bb.mid} 下:${ind.bb.low}</span>`;
+      bbHtml = `  |  <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} 中:${ind.bb.mid} 下:${ind.bb.low}</span>`;
     }
 
     ohlcLegend.innerHTML =
-      `<strong style="color:#fff">${currentName} (${currentSymbol})</strong> &nbsp;時間: ${fmtTime(bar.time)} &nbsp;` +
-      `開:<span style="color:${clr}">${bar.open}</span> &nbsp;高:<span style="color:${clr}">${bar.high}</span> &nbsp;` +
-      `低:<span style="color:${clr}">${bar.low}</span> &nbsp;收:<span style="color:${clr}">${bar.close}</span>` +
+      `<strong style="color:#fff">${currentName} (${currentSymbol})</strong>  時間: ${fmtTime(bar.time)}  ` +
+      `開:<span style="color:${clr}">${bar.open}</span>  高:<span style="color:${clr}">${bar.high}</span>  ` +
+      `低:<span style="color:${clr}">${bar.low}</span>  收:<span style="color:${clr}">${bar.close}</span>` +
       maHtml + bbHtml;
 
     let volMaHtml = '';
@@ -1322,10 +1217,10 @@ function initApp() {
       const vItems = VOL_MA_CONFIG
         .filter(c => ind.volMa[c.period] !== undefined)
         .map(c => `<span style="color:${c.color}">${c.label}:${fmtVol(ind.volMa[c.period])}</span>`);
-      if (vItems.length) volMaHtml = ` &nbsp;|&nbsp; ${vItems.join(' &nbsp;')}`;
+      if (vItems.length) volMaHtml = `  |  ${vItems.join('  ')}`;
     }
 
-    volLegend.innerHTML = `時間: ${fmtTime(bar.time)} &nbsp;|&nbsp; 成交量: <strong style="color:${clr}">${fmtVol(bar.volume)}</strong>${volMaHtml}`;
+    volLegend.innerHTML = `時間: ${fmtTime(bar.time)}  |  成交量: <strong style="color:${clr}">${fmtVol(bar.volume)}</strong>${volMaHtml}`;
   }
 
   function renderAllSeries(candles, fitView = false) {
@@ -1360,10 +1255,7 @@ function initApp() {
         subChart.timeScale().fitContent();
       }
     }
-    requestAnimationFrame(() => {
-      renderAllOverlays();
-      setTimeout(renderAllOverlays, 80);
-    });
+    requestAnimationFrame(renderDrawings);
   }
 
   chart.subscribeCrosshairMove(p => {
@@ -1731,8 +1623,8 @@ function initApp() {
     }
   });
 
-  chartContainer.addEventListener('wheel', () => requestAnimationFrame(renderAllOverlays), { passive: true });
-  chartContainer.addEventListener('pointermove', () => { if (cloudShapes.length || pendingPoint || lastCandles.length) requestAnimationFrame(renderAllOverlays); });
+  chartContainer.addEventListener('wheel', () => requestAnimationFrame(renderDrawings), { passive: true });
+  chartContainer.addEventListener('pointermove', () => { if (cloudShapes.length || pendingPoint) requestAnimationFrame(renderDrawings); });
 
   [toggleMa, toggleBb, toggleDeduct].forEach(el => {
     el.onchange = () => {
