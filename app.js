@@ -56,6 +56,9 @@ function initApp() {
   let priceLines = [], cloudLines = [], cloudShapes = [];
   let selectedTarget = null; // { kind: 'line' | 'shape', index: number }
   let hoveredTarget = null;  // { kind: 'line' | 'shape', index: number }
+  // 拖曳狀態：mode 可為 'move' | 'p1' | 'p2' | 'top' | 'bottom' | 'left' | 'right'
+  let dragState = null;
+  let suppressNextClick = false;
   let currentSymbol = symbolSelect.value, currentName = '台積電', currentInterval = intervalSelect.value;
   let unsub = null, liveTimer = null, favMap = {}, lastCandles = [], syncingCross = false, indicators = null;
 
@@ -141,7 +144,7 @@ function initApp() {
     });
   });
 
-  // ========== 畫布與幾何命中偵測工具 ==========
+  // ========== 畫布、座標與拖曳變形工具 ==========
   function getActiveColor() {
     return customColorInput.value || colorSelect.value || '#2962ff';
   }
@@ -167,6 +170,12 @@ function initApp() {
     renderDrawings();
   }
   new ResizeObserver(resizeCanvas).observe(chartContainer);
+
+  function logicalToTime(logical) {
+    if (!lastCandles.length || logical == null) return null;
+    const idx = Math.max(0, Math.min(lastCandles.length - 1, Math.round(logical)));
+    return lastCandles[idx]?.time ?? null;
+  }
 
   function pointToPixel(pt) {
     if (!pt || !lastCandles.length) return null;
@@ -207,18 +216,44 @@ function initApp() {
     return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
   }
 
-  // 偵測滑鼠座標 (mx, my) 是否靠近某條水平線或畫布圖形
-  function hitTestDrawing(mx, my) {
-    const tol = 8; // 像素容許半徑
+  // 偵測滑鼠是否命中某個控制點（用於縮放/改形狀）或圖形本體（用於整體移動）
+  function hitTestWithDragMode(mx, my) {
+    const handleTol = 9;
+    const lineTol = 8;
     const plotW = chartContainer.clientWidth - 80;
     if (mx < 0 || mx > plotW) return null;
 
-    // 1. 優先檢查畫布上的圖形（由上層往底層找）
+    // 1. 若已選取某個圖形，優先檢查它的控制點與邊界
+    if (selectedTarget?.kind === 'shape') {
+      const idx = selectedTarget.index;
+      const s = cloudShapes[idx];
+      if (s) {
+        if (s.type === 'trend' || s.type === 'ray' || s.type === 'ellipse') {
+          const p1 = pointToPixel(s.p1), p2 = pointToPixel(s.p2);
+          if (p1 && Math.hypot(mx - p1.x, my - p1.y) <= handleTol) return { target: selectedTarget, mode: 'p1' };
+          if (p2 && Math.hypot(mx - p2.x, my - p2.y) <= handleTol) return { target: selectedTarget, mode: 'p2' };
+        } else if (s.type === 'rect') {
+          const p1 = pointToPixel(s.p1), p2 = pointToPixel(s.p2);
+          if (p1 && Math.hypot(mx - p1.x, my - p1.y) <= handleTol) return { target: selectedTarget, mode: 'p1' };
+          if (p2 && Math.hypot(mx - p2.x, my - p2.y) <= handleTol) return { target: selectedTarget, mode: 'p2' };
+          if (p1 && p2) {
+            const left = Math.min(p1.x, p2.x), right = Math.max(p1.x, p2.x);
+            const top = Math.min(p1.y, p2.y), bottom = Math.max(p1.y, p2.y);
+            if (Math.abs(my - top) <= lineTol && mx >= left && mx <= right) return { target: selectedTarget, mode: 'top' };
+            if (Math.abs(my - bottom) <= lineTol && mx >= left && mx <= right) return { target: selectedTarget, mode: 'bottom' };
+            if (Math.abs(mx - left) <= lineTol && my >= top && my <= bottom) return { target: selectedTarget, mode: 'left' };
+            if (Math.abs(mx - right) <= lineTol && my >= top && my <= bottom) return { target: selectedTarget, mode: 'right' };
+          }
+        }
+      }
+    }
+
+    // 2. 檢查畫布圖形本體（整體移動）
     for (let i = cloudShapes.length - 1; i >= 0; i--) {
       const s = cloudShapes[i];
       if (s.type === 'vline') {
         const p1 = pointToPixel(s.p1);
-        if (p1 && Math.abs(mx - p1.x) <= tol) return { kind: 'shape', index: i };
+        if (p1 && Math.abs(mx - p1.x) <= lineTol) return { target: { kind: 'shape', index: i }, mode: 'move' };
       } else if (s.type === 'trend' || s.type === 'ray') {
         const p1 = pointToPixel(s.p1), p2 = pointToPixel(s.p2);
         if (p1 && p2) {
@@ -228,8 +263,8 @@ function initApp() {
             endX = p2.x >= p1.x ? plotW : 0;
             endY = p1.y + slope * (endX - p1.x);
           }
-          if (distToSegment(mx, my, p1.x, p1.y, endX, endY) <= tol) {
-            return { kind: 'shape', index: i };
+          if (distToSegment(mx, my, p1.x, p1.y, endX, endY) <= lineTol) {
+            return { target: { kind: 'shape', index: i }, mode: 'move' };
           }
         }
       } else if (s.type === 'ellipse') {
@@ -239,38 +274,25 @@ function initApp() {
           const rx = Math.max(4, Math.abs(p2.x - p1.x) / 2);
           const ry = Math.max(4, Math.abs(p2.y - p1.y) / 2);
           const norm = ((mx - cx) ** 2) / (rx ** 2) + ((my - cy) ** 2) / (ry ** 2);
-          // 點在橢圓邊框附近或內部都算命中
-          if (norm <= 1.25) return { kind: 'shape', index: i };
+          if (norm <= 1.25) return { target: { kind: 'shape', index: i }, mode: 'move' };
         }
       } else if (s.type === 'rect') {
         const p1 = pointToPixel(s.p1), p2 = pointToPixel(s.p2);
         if (p1 && p2) {
           const left = Math.min(p1.x, p2.x), right = Math.max(p1.x, p2.x);
           const top = Math.min(p1.y, p2.y), bottom = Math.max(p1.y, p2.y);
-          // 命中四條邊或內部分割線
-          const nearLeft = Math.abs(mx - left) <= tol && my >= top - tol && my <= bottom + tol;
-          const nearRight = Math.abs(mx - right) <= tol && my >= top - tol && my <= bottom + tol;
-          const nearTop = Math.abs(my - top) <= tol && mx >= left - tol && mx <= right + tol;
-          const nearBottom = Math.abs(my - bottom) <= tol && mx >= left - tol && mx <= right + tol;
-          if (nearLeft || nearRight || nearTop || nearBottom) return { kind: 'shape', index: i };
-
-          const ratios = Array.isArray(s.ratios) && s.ratios.length ? s.ratios : getRatios();
-          const diff = s.p2.price - s.p1.price;
-          for (const r of ratios) {
-            const py = candleSeries.priceToCoordinate(s.p1.price + diff * r);
-            if (py !== null && Math.abs(my - py) <= tol && mx >= left - tol && mx <= right + tol) {
-              return { kind: 'shape', index: i };
-            }
+          if (mx >= left - lineTol && mx <= right + lineTol && my >= top - lineTol && my <= bottom + lineTol) {
+            return { target: { kind: 'shape', index: i }, mode: 'move' };
           }
         }
       }
     }
 
-    // 2. 檢查水平切線
+    // 3. 檢查水平切線（整體上下移動）
     for (let i = cloudLines.length - 1; i >= 0; i--) {
       const ly = candleSeries.priceToCoordinate(cloudLines[i].price);
-      if (ly !== null && Math.abs(my - ly) <= tol) {
-        return { kind: 'line', index: i };
+      if (ly !== null && Math.abs(my - ly) <= lineTol) {
+        return { target: { kind: 'line', index: i }, mode: 'move' };
       }
     }
 
@@ -300,10 +322,10 @@ function initApp() {
     if (!pt) return;
     drawCtx.save();
     drawCtx.beginPath();
-    drawCtx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+    drawCtx.arc(pt.x, pt.y, 5.5, 0, Math.PI * 2);
     drawCtx.fillStyle = '#ffffff';
     drawCtx.fill();
-    drawCtx.lineWidth = 2;
+    drawCtx.lineWidth = 2.2;
     drawCtx.strokeStyle = color;
     drawCtx.stroke();
     drawCtx.restore();
@@ -358,12 +380,12 @@ function initApp() {
         drawCtx.shadowBlur = 0;
         [p1, p2].forEach(pt => {
           drawCtx.beginPath();
-          drawCtx.arc(pt.x, pt.y, isHighlighted ? 5 : 3.5, 0, Math.PI * 2);
+          drawCtx.arc(pt.x, pt.y, isHighlighted ? 5.5 : 3.5, 0, Math.PI * 2);
           drawCtx.fillStyle = isHighlighted ? '#fff' : color;
           drawCtx.fill();
           if (isHighlighted) {
             drawCtx.strokeStyle = color;
-            drawCtx.lineWidth = 2;
+            drawCtx.lineWidth = 2.2;
             drawCtx.stroke();
           }
         });
@@ -467,9 +489,10 @@ function initApp() {
       const target = { kind: 'line', index: idx };
       const isHighlighted = isSameTarget(selectedTarget, target) || isSameTarget(hoveredTarget, target);
       pl.applyOptions({
+        price: item.price,
         color: item.color || '#2962ff',
         lineWidth: isHighlighted ? 4 : 2,
-        title: isHighlighted ? '★已選取水平線' : '雲端線'
+        title: isHighlighted ? '★已選取水平線(可拖曳)' : '雲端線'
       });
     });
   }
@@ -482,7 +505,6 @@ function initApp() {
     renderDrawingsList();
     updateStatusText();
 
-    // 若選取了四方形，把該四方形的倍數同步顯示到輸入框方便直接修改
     if (selectedTarget?.kind === 'shape') {
       const s = cloudShapes[selectedTarget.index];
       if (s?.type === 'rect' && Array.isArray(s.ratios)) {
@@ -490,6 +512,120 @@ function initApp() {
       }
     }
   }
+
+  // ========== 滑鼠拖曳移動與修改形狀大小 ==========
+  function applyDragAtPixel(mx, my) {
+    if (!dragState) return;
+    const pt = pixelToPoint(mx, my);
+    if (!pt) return;
+
+    const { target, mode, startPt, origItem } = dragState;
+    const dLogical = pt.logical - startPt.logical;
+    const dPrice = pt.price - startPt.price;
+
+    if (target.kind === 'line') {
+      const newPrice = Number((origItem.price + dPrice).toFixed(2));
+      cloudLines[target.index] = { ...origItem, price: newPrice };
+      syncPriceLinesStyle();
+    } else if (target.kind === 'shape') {
+      const s = JSON.parse(JSON.stringify(origItem));
+      if (mode === 'move') {
+        if (s.p1) {
+          const nl = Number((s.p1.logical + dLogical).toFixed(3));
+          s.p1 = { ...s.p1, logical: nl, time: logicalToTime(nl), price: Number((s.p1.price + dPrice).toFixed(2)) };
+        }
+        if (s.p2) {
+          const nl2 = Number((s.p2.logical + dLogical).toFixed(3));
+          s.p2 = { ...s.p2, logical: nl2, time: logicalToTime(nl2), price: Number((s.p2.price + dPrice).toFixed(2)) };
+        }
+      } else if (mode === 'p1') {
+        s.p1 = { logical: pt.logical, time: pt.time, price: pt.price };
+      } else if (mode === 'p2') {
+        s.p2 = { logical: pt.logical, time: pt.time, price: pt.price };
+      } else if (mode === 'top') {
+        if (s.p1.price >= s.p2.price) s.p1.price = pt.price;
+        else s.p2.price = pt.price;
+      } else if (mode === 'bottom') {
+        if (s.p1.price < s.p2.price) s.p1.price = pt.price;
+        else s.p2.price = pt.price;
+      } else if (mode === 'left') {
+        if (s.p1.logical <= s.p2.logical) {
+          s.p1.logical = pt.logical;
+          s.p1.time = pt.time;
+        } else {
+          s.p2.logical = pt.logical;
+          s.p2.time = pt.time;
+        }
+      } else if (mode === 'right') {
+        if (s.p1.logical > s.p2.logical) {
+          s.p1.logical = pt.logical;
+          s.p1.time = pt.time;
+        } else {
+          s.p2.logical = pt.logical;
+          s.p2.time = pt.time;
+        }
+      }
+      cloudShapes[target.index] = s;
+      renderDrawings();
+    }
+  }
+
+  chartContainer.addEventListener('mousedown', e => {
+    if (e.button !== 0 || isDrawMode) return;
+    const rect = chartContainer.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const hit = hitTestWithDragMode(mx, my);
+    if (!hit) return;
+
+    const startPt = pixelToPoint(mx, my);
+    if (!startPt) return;
+
+    setSelectedTarget(hit.target);
+    const origItem = hit.target.kind === 'line'
+      ? { ...cloudLines[hit.target.index] }
+      : JSON.parse(JSON.stringify(cloudShapes[hit.target.index]));
+
+    dragState = {
+      target: hit.target,
+      mode: hit.mode,
+      startPt,
+      origItem,
+      moved: false
+    };
+
+    // 拖曳圖形時暫時鎖定圖表平移，避免畫面跟著捲動
+    chart.applyOptions({ handleScroll: false, handleScale: false });
+    volChart.applyOptions({ handleScroll: false, handleScale: false });
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!dragState) return;
+    const rect = chartContainer.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    dragState.moved = true;
+    applyDragAtPixel(mx, my);
+  });
+
+  window.addEventListener('mouseup', async () => {
+    if (!dragState) return;
+    const wasMoved = dragState.moved;
+    dragState = null;
+
+    chart.applyOptions({ handleScroll: true, handleScale: true });
+    volChart.applyOptions({ handleScroll: true, handleScale: true });
+
+    if (wasMoved) {
+      suppressNextClick = true;
+      setTimeout(() => { suppressNextClick = false; }, 60);
+      renderDrawingsList();
+      updateStatusText();
+      const docRef = db.collection('chart_drawings').doc(encodeURIComponent(currentSymbol));
+      await docRef.set({ lines: cloudLines, shapes: cloudShapes }, { merge: true });
+    }
+  });
 
   // ========== 選擇性刪除與雲端同步操作 ==========
   async function deleteTarget(target) {
@@ -554,7 +690,6 @@ function initApp() {
       `;
     }).join('');
 
-    // 點擊清單列時選取並高亮圖表上的對應圖形
     drawingsListEl.querySelectorAll('.draw-item').forEach(row => {
       row.onclick = e => {
         if (e.target.classList.contains('batch-chk') || e.target.classList.contains('item-del-btn')) return;
@@ -562,7 +697,6 @@ function initApp() {
       };
     });
 
-    // 單筆刪除按鈕
     drawingsListEl.querySelectorAll('.item-del-btn').forEach(btn => {
       btn.onclick = async e => {
         e.stopPropagation();
@@ -709,15 +843,20 @@ function initApp() {
   }
 
   chart.subscribeCrosshairMove(p => {
-    if (p.point) {
+    if (p.point && !dragState) {
       if (isDrawMode && pendingPoint) {
         hoverPoint = pixelToPoint(p.point.x, p.point.y);
         renderDrawings();
       } else if (!isDrawMode) {
-        const hit = hitTestDrawing(p.point.x, p.point.y);
+        const hitInfo = hitTestWithDragMode(p.point.x, p.point.y);
+        const hit = hitInfo ? hitInfo.target : null;
         if (!isSameTarget(hit, hoveredTarget)) {
           hoveredTarget = hit;
-          chartContainer.style.cursor = hoveredTarget ? 'pointer' : '';
+          if (!hitInfo) chartContainer.style.cursor = '';
+          else if (hitInfo.mode === 'p1' || hitInfo.mode === 'p2') chartContainer.style.cursor = 'nwse-resize';
+          else if (hitInfo.mode === 'top' || hitInfo.mode === 'bottom') chartContainer.style.cursor = 'ns-resize';
+          else if (hitInfo.mode === 'left' || hitInfo.mode === 'right') chartContainer.style.cursor = 'ew-resize';
+          else chartContainer.style.cursor = 'grab';
           syncPriceLinesStyle();
           renderDrawings();
         }
@@ -763,7 +902,7 @@ function initApp() {
     } else if (selectedTarget) {
       const item = selectedTarget.kind === 'line' ? cloudLines[selectedTarget.index] : cloudShapes[selectedTarget.index];
       statusBadge.style.color = '#ffeb3b';
-      statusBadge.textContent = item ? `🎯 已選取：${describeItem(selectedTarget.kind, item)}（按 Delete 刪除）` : `☁️ ${currentName}`;
+      statusBadge.textContent = item ? `🎯 已選取：${describeItem(selectedTarget.kind, item)}（拖曳移動/縮放，Delete 刪除）` : `☁️ ${currentName}`;
     } else {
       statusBadge.style.color = '#4caf50';
       const total = cloudLines.length + cloudShapes.length;
@@ -774,6 +913,7 @@ function initApp() {
   function subscribeCloud(sym) {
     if (unsub) unsub();
     unsub = db.collection('chart_drawings').doc(encodeURIComponent(sym)).onSnapshot(doc => {
+      if (dragState) return; // 拖曳中先保留本地即時座標，放開時會寫回
       priceLines.forEach(l => candleSeries.removePriceLine(l));
       priceLines = [];
       const data = doc.exists ? doc.data() : {};
@@ -837,13 +977,13 @@ function initApp() {
     hoverPoint = null;
     selectedTarget = null;
     hoveredTarget = null;
+    dragState = null;
     deleteSelectedBtn.disabled = true;
     drawBtn.classList.remove('active');
     loadData(clean, currentInterval, false);
     liveTimer = setInterval(() => loadData(currentSymbol, currentInterval, true), 15000);
   }
 
-  // 若已有選取特定圖形，變更顏色時也會同步更新該已選取圖形的顏色
   async function applyColorChange(newColor) {
     renderDrawings();
     if (!selectedTarget) return;
@@ -866,7 +1006,6 @@ function initApp() {
   };
   customColorInput.oninput = () => renderDrawings();
 
-  // 修改四方形倍數：若有選取特定四方形則只改該四方形，否則套用到全部四方形
   async function applyNewRatiosToRects() {
     const ratios = getRatios();
     renderDrawings();
@@ -918,7 +1057,6 @@ function initApp() {
     db.collection('chart_drawings').doc(encodeURIComponent(currentSymbol)).set({ lines: [], shapes: [] });
   };
 
-  // 鍵盤 Delete / Backspace 刪除選取的圖形；Escape 取消畫圖或選取
   window.addEventListener('keydown', async e => {
     if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
     if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTarget) {
@@ -933,23 +1071,21 @@ function initApp() {
     }
   });
 
-  // 圖表右鍵點擊某條線/圖形時直接刪除該項目
   chartContainer.addEventListener('contextmenu', async e => {
     const rect = chartContainer.getBoundingClientRect();
-    const hit = hitTestDrawing(e.clientX - rect.left, e.clientY - rect.top);
-    if (hit) {
+    const hitInfo = hitTestWithDragMode(e.clientX - rect.left, e.clientY - rect.top);
+    if (hitInfo) {
       e.preventDefault();
-      await deleteTarget(hit);
+      await deleteTarget(hitInfo.target);
     }
   });
 
   chart.subscribeClick(async p => {
-    if (!p.point) return;
+    if (suppressNextClick || !p.point) return;
 
-    // 非畫圖模式：點擊圖表可選取或取消選取線條/圖形
     if (!isDrawMode) {
-      const hit = hitTestDrawing(p.point.x, p.point.y);
-      setSelectedTarget(hit);
+      const hitInfo = hitTestWithDragMode(p.point.x, p.point.y);
+      setSelectedTarget(hitInfo ? hitInfo.target : null);
       return;
     }
 
