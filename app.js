@@ -54,9 +54,8 @@ function initApp() {
 
   let isDrawMode = false, pendingPoint = null, hoverPoint = null;
   let priceLines = [], cloudLines = [], cloudShapes = [];
-  let selectedTarget = null; // { kind: 'line' | 'shape', index: number }
-  let hoveredTarget = null;  // { kind: 'line' | 'shape', index: number }
-  // 拖曳狀態：mode 可為 'move' | 'p1' | 'p2' | 'top' | 'bottom' | 'left' | 'right'
+  let selectedTarget = null;
+  let hoveredTarget = null;
   let dragState = null;
   let suppressNextClick = false;
   let currentSymbol = symbolSelect.value, currentName = '台積電', currentInterval = intervalSelect.value;
@@ -144,7 +143,6 @@ function initApp() {
     });
   });
 
-  // ========== 畫布、座標與拖曳變形工具 ==========
   function getActiveColor() {
     return customColorInput.value || colorSelect.value || '#2962ff';
   }
@@ -216,14 +214,12 @@ function initApp() {
     return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
   }
 
-  // 偵測滑鼠是否命中某個控制點（用於縮放/改形狀）或圖形本體（用於整體移動）
   function hitTestWithDragMode(mx, my) {
     const handleTol = 9;
     const lineTol = 8;
     const plotW = chartContainer.clientWidth - 80;
     if (mx < 0 || mx > plotW) return null;
 
-    // 1. 若已選取某個圖形，優先檢查它的控制點與邊界
     if (selectedTarget?.kind === 'shape') {
       const idx = selectedTarget.index;
       const s = cloudShapes[idx];
@@ -248,7 +244,6 @@ function initApp() {
       }
     }
 
-    // 2. 檢查畫布圖形本體（整體移動）
     for (let i = cloudShapes.length - 1; i >= 0; i--) {
       const s = cloudShapes[i];
       if (s.type === 'vline') {
@@ -288,7 +283,6 @@ function initApp() {
       }
     }
 
-    // 3. 檢查水平切線（整體上下移動）
     for (let i = cloudLines.length - 1; i >= 0; i--) {
       const ly = candleSeries.priceToCoordinate(cloudLines[i].price);
       if (ly !== null && Math.abs(my - ly) <= lineTol) {
@@ -492,7 +486,7 @@ function initApp() {
         price: item.price,
         color: item.color || '#2962ff',
         lineWidth: isHighlighted ? 4 : 2,
-        title: isHighlighted ? '★已選取水平線(可拖曳)' : '雲端線'
+        title: isHighlighted ? '★已選取' : '雲端線'
       });
     });
   }
@@ -513,7 +507,6 @@ function initApp() {
     }
   }
 
-  // ========== 滑鼠拖曳移動與修改形狀大小 ==========
   function applyDragAtPixel(mx, my) {
     if (!dragState) return;
     const pt = pixelToPoint(mx, my);
@@ -594,7 +587,6 @@ function initApp() {
       moved: false
     };
 
-    // 拖曳圖形時暫時鎖定圖表平移，避免畫面跟著捲動
     chart.applyOptions({ handleScroll: false, handleScale: false });
     volChart.applyOptions({ handleScroll: false, handleScale: false });
     e.preventDefault();
@@ -627,7 +619,6 @@ function initApp() {
     }
   });
 
-  // ========== 選擇性刪除與雲端同步操作 ==========
   async function deleteTarget(target) {
     if (!target) return;
     const docRef = db.collection('chart_drawings').doc(encodeURIComponent(currentSymbol));
@@ -791,18 +782,18 @@ function initApp() {
       const items = MA_CONFIG
         .filter(c => ind.ma[c.period] !== undefined)
         .map(c => `<span style="color:${c.color}">${c.label}:${ind.ma[c.period]}</span>`);
-      if (items.length) maHtml = `<br/>${items.join('  ')}`;
+      if (items.length) maHtml = `<br/>${items.join(' &nbsp;')}`;
     }
 
     let bbHtml = '';
     if (ind?.bb && toggleBb.checked) {
-      bbHtml = `  |  <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} 中:${ind.bb.mid} 下:${ind.bb.low}</span>`;
+      bbHtml = ` &nbsp;|&nbsp; <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} 中:${ind.bb.mid} 下:${ind.bb.low}</span>`;
     }
 
     ohlcLegend.innerHTML =
-      `<strong style="color:#fff">${currentName} (${currentSymbol})</strong>  時間: ${fmtTime(bar.time)}  ` +
-      `開:<span style="color:${clr}">${bar.open}</span>  高:<span style="color:${clr}">${bar.high}</span>  ` +
-      `低:<span style="color:${clr}">${bar.low}</span>  收:<span style="color:${clr}">${bar.close}</span>` +
+      `<strong style="color:#fff">${currentName} (${currentSymbol})</strong> &nbsp;時間: ${fmtTime(bar.time)} &nbsp;` +
+      `開:<span style="color:${clr}">${bar.open}</span> &nbsp;高:<span style="color:${clr}">${bar.high}</span> &nbsp;` +
+      `低:<span style="color:${clr}">${bar.low}</span> &nbsp;收:<span style="color:${clr}">${bar.close}</span>` +
       maHtml + bbHtml;
 
     let volMaHtml = '';
@@ -810,10 +801,10 @@ function initApp() {
       const vItems = VOL_MA_CONFIG
         .filter(c => ind.volMa[c.period] !== undefined)
         .map(c => `<span style="color:${c.color}">${c.label}:${fmtVol(ind.volMa[c.period])}</span>`);
-      if (vItems.length) volMaHtml = `  |  ${vItems.join('  ')}`;
+      if (vItems.length) volMaHtml = ` &nbsp;|&nbsp; ${vItems.join(' &nbsp;')}`;
     }
 
-    volLegend.innerHTML = `時間: ${fmtTime(bar.time)}  |  成交量: <strong style="color:${clr}">${fmtVol(bar.volume)}</strong>${volMaHtml}`;
+    volLegend.innerHTML = `時間: ${fmtTime(bar.time)} &nbsp;|&nbsp; 成交量: <strong style="color:${clr}">${fmtVol(bar.volume)}</strong>${volMaHtml}`;
   }
 
   function renderAllSeries(candles, fitView = false) {
@@ -898,11 +889,11 @@ function initApp() {
     if (isDrawMode) {
       const toolName = drawToolSelect.options[drawToolSelect.selectedIndex].text;
       statusBadge.style.color = '#ffeb3b';
-      statusBadge.textContent = pendingPoint ? `🟢 ${toolName}：請點第 2 點` : `🟢 ${toolName}：請點圖表位置`;
+      statusBadge.textContent = pendingPoint ? `🟢 ${toolName}：點第2點` : `🟢 ${toolName}：點圖表`;
     } else if (selectedTarget) {
       const item = selectedTarget.kind === 'line' ? cloudLines[selectedTarget.index] : cloudShapes[selectedTarget.index];
       statusBadge.style.color = '#ffeb3b';
-      statusBadge.textContent = item ? `🎯 已選取：${describeItem(selectedTarget.kind, item)}（拖曳移動/縮放，Delete 刪除）` : `☁️ ${currentName}`;
+      statusBadge.textContent = item ? `🎯 已選取：${describeItem(selectedTarget.kind, item)}` : `☁️ ${currentName}`;
     } else {
       statusBadge.style.color = '#4caf50';
       const total = cloudLines.length + cloudShapes.length;
@@ -913,7 +904,7 @@ function initApp() {
   function subscribeCloud(sym) {
     if (unsub) unsub();
     unsub = db.collection('chart_drawings').doc(encodeURIComponent(sym)).onSnapshot(doc => {
-      if (dragState) return; // 拖曳中先保留本地即時座標，放開時會寫回
+      if (dragState) return;
       priceLines.forEach(l => candleSeries.removePriceLine(l));
       priceLines = [];
       const data = doc.exists ? doc.data() : {};
