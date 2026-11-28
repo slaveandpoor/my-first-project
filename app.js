@@ -98,8 +98,8 @@ function initApp() {
       const minBottom = parseFloat(getComputedStyle(bottomPane).minHeight) || 45;
       const totalH = startTopH + startBottomH;
 
-      let newTopH = Math.max(minTop, Math.min(totalH - minBottom, startTopH + dy));
-      let newBottomH = totalH - newTopH;
+      const newTopH = Math.max(minTop, Math.min(totalH - minBottom, startTopH + dy));
+      const newBottomH = totalH - newTopH;
 
       topPane.style.flex = `${newTopH} 1 0px`;
       bottomPane.style.flex = `${newBottomH} 1 0px`;
@@ -179,7 +179,6 @@ function initApp() {
   }
   window.addEventListener('resize', applyResponsiveChartOpts);
 
-  // 最新價格不顯示在右側座標軸，改顯示在 K 棒上
   const candleSeries = chart.addCandlestickSeries({
     upColor: '#26a69a',
     downColor: '#ef5350',
@@ -189,7 +188,6 @@ function initApp() {
     lastValueVisible: false
   });
 
-  // 附圖最新數值不顯示在右側座標軸，改顯示在曲線/柱狀圖內
   const volumeSeries = volChart.addHistogramSeries({
     priceFormat: { type: 'volume' },
     lastValueVisible: false
@@ -280,11 +278,8 @@ function initApp() {
     for (let i = 0; i < values.length; i++) {
       const v = values[i];
       if (v == null || Number.isNaN(v)) continue;
-      if (ema === null) {
-        ema = v;
-      } else {
-        ema = v * k + ema * (1 - k);
-      }
+      if (ema === null) ema = v;
+      else ema = v * k + ema * (1 - k);
       out[i] = ema;
     }
     return out;
@@ -456,20 +451,20 @@ function initApp() {
     }
     if (info.mode === 'kd') {
       subLegend.innerHTML =
-        `<strong style="color:#fff">KD(9,3,3)</strong>  ` +
-        `<span style="color:#ffeb3b">K:${info.k}</span>  ` +
+        `<strong style="color:#fff">KD(9,3,3)</strong> &nbsp;` +
+        `<span style="color:#ffeb3b">K:${info.k}</span> &nbsp;` +
         `<span style="color:#00e5ff">D:${info.d}</span>`;
     } else if (info.mode === 'bias') {
       subLegend.innerHTML =
-        `<strong style="color:#fff">18-6乖離(18,6)</strong>  ` +
-        `<span style="color:#ff9800">乖離18:${info.bias18 !== null ? info.bias18 + '%' : '--'}</span>  ` +
+        `<strong style="color:#fff">18-6乖離(18,6)</strong> &nbsp;` +
+        `<span style="color:#ff9800">乖離18:${info.bias18 !== null ? info.bias18 + '%' : '--'}</span> &nbsp;` +
         `<span style="color:#69f0ae">乖離6:${info.bias6 !== null ? info.bias6 + '%' : '--'}</span>`;
     } else if (info.mode === 'macd') {
       const oscColor = (info.osc ?? 0) >= 0 ? '#26a69a' : '#ef5350';
       subLegend.innerHTML =
-        `<strong style="color:#fff">MACD(12,26,9)</strong>  ` +
-        `<span style="color:#ffffff">DIF:${info.dif ?? '--'}</span>  ` +
-        `<span style="color:#ffeb3b">MACD:${info.dea ?? '--'}</span>  ` +
+        `<strong style="color:#fff">MACD(12,26,9)</strong> &nbsp;` +
+        `<span style="color:#ffffff">DIF:${info.dif ?? '--'}</span> &nbsp;` +
+        `<span style="color:#ffeb3b">MACD:${info.dea ?? '--'}</span> &nbsp;` +
         `<span style="color:${oscColor}">OSC:${info.osc ?? '--'}</span>`;
     }
   }
@@ -675,7 +670,7 @@ function initApp() {
     return a && b && a.kind === b.kind && a.index === b.index;
   }
 
-  function drawBadgeOnCtx(ctx, text, x, y, color, align = 'left', bg = 'rgba(19, 23, 34, 0.9)') {
+  function drawBadgeOnCtx(ctx, text, x, y, color, align = 'left', bg = 'rgba(19, 23, 34, 0.92)') {
     ctx.save();
     ctx.font = isMobile() ? 'bold 10px sans-serif' : 'bold 11px sans-serif';
     const padX = 5, h = 15;
@@ -831,7 +826,6 @@ function initApp() {
     drawCtx.restore();
   }
 
-  // 在 K 棒上繪製：最高價、最低價、最新價格（不放右側座標軸）
   function drawCandlePriceMarkers() {
     if (!lastCandles.length) return;
     const plotW = chartContainer.clientWidth - getPriceScaleWidth();
@@ -871,7 +865,8 @@ function initApp() {
       const hx = ts.logicalToCoordinate(maxIdx);
       const hy = candleSeries.priceToCoordinate(maxBar.high);
       if (hx !== null && hy !== null) {
-        drawBadgeOnCtx(drawCtx, `▲ ${maxBar.high}`, hx, Math.max(14, hy - 12), '#ef5350', 'center');
+        const clampedX = Math.max(45, Math.min(plotW - 45, hx));
+        drawBadgeOnCtx(drawCtx, `▲ ${maxBar.high}`, clampedX, Math.max(14, hy - 12), '#ef5350', 'center');
       }
     }
 
@@ -879,7 +874,8 @@ function initApp() {
       const lx = ts.logicalToCoordinate(minIdx);
       const ly = candleSeries.priceToCoordinate(minBar.low);
       if (lx !== null && ly !== null) {
-        drawBadgeOnCtx(drawCtx, `▼ ${minBar.low}`, lx, Math.min(plotH - 12, ly + 12), '#26a69a', 'center');
+        const clampedX = Math.max(45, Math.min(plotW - 45, lx));
+        drawBadgeOnCtx(drawCtx, `▼ ${minBar.low}`, clampedX, Math.min(plotH - 12, ly + 12), '#26a69a', 'center');
       }
     }
 
@@ -893,15 +889,15 @@ function initApp() {
       drawCtx.arc(cx, cy, 4, 0, Math.PI * 2);
       drawCtx.fillStyle = clr;
       drawCtx.fill();
-      const align = cx > plotW - 85 ? 'right' : 'left';
+      const align = cx > plotW - 90 ? 'right' : 'left';
       const offsetX = align === 'right' ? -7 : 7;
-      drawBadgeOnCtx(drawCtx, `今 ${lastBar.close}`, cx + offsetX, cy, clr, align);
+      const clampedY = Math.max(14, Math.min(plotH - 12, cy));
+      drawBadgeOnCtx(drawCtx, `今 ${lastBar.close}`, cx + offsetX, clampedY, clr, align);
     }
 
     drawCtx.restore();
   }
 
-  // 在成交量圖與技術指標附圖的曲線/柱狀圖內標示最新數值（不放右側座標軸）
   function drawSubChartsLatestValues() {
     const volW = volumeContainer.clientWidth - getPriceScaleWidth();
     const volH = volumeContainer.clientHeight;
@@ -945,7 +941,7 @@ function initApp() {
           subCtx.fillStyle = item.color;
           subCtx.fill();
 
-          const align = sx > subW - 90 ? 'right' : 'left';
+          const align = sx > subW - 95 ? 'right' : 'left';
           const offsetX = align === 'right' ? -6 : 6;
           const drawY = Math.max(14, Math.min(subH - 10, sy + (item.yOffset || 0)));
           drawBadgeOnCtx(subCtx, item.text, sx + offsetX, drawY, item.color, align);
@@ -984,6 +980,11 @@ function initApp() {
   }
 
   function renderAllOverlays() {
+    syncCanvasSize(drawCanvas, drawCtx, chartContainer);
+    syncCanvasSize(volCanvas, volCtx, volumeContainer);
+    if (subIndicatorContainer.style.display !== 'none') {
+      syncCanvasSize(subCanvas, subCtx, subIndicatorContainer);
+    }
     renderDrawings();
     drawSubChartsLatestValues();
   }
@@ -1302,18 +1303,18 @@ function initApp() {
       const items = MA_CONFIG
         .filter(c => ind.ma[c.period] !== undefined)
         .map(c => `<span style="color:${c.color}">${c.label}:${ind.ma[c.period]}</span>`);
-      if (items.length) maHtml = `<br/>${items.join('  ')}`;
+      if (items.length) maHtml = `<br/>${items.join(' &nbsp;')}`;
     }
 
     let bbHtml = '';
     if (ind?.bb && toggleBb.checked) {
-      bbHtml = `  |  <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} 中:${ind.bb.mid} 下:${ind.bb.low}</span>`;
+      bbHtml = ` &nbsp;|&nbsp; <span style="color:#90caf9">BB(20,2) 上:${ind.bb.up} 中:${ind.bb.mid} 下:${ind.bb.low}</span>`;
     }
 
     ohlcLegend.innerHTML =
-      `<strong style="color:#fff">${currentName} (${currentSymbol})</strong>  時間: ${fmtTime(bar.time)}  ` +
-      `開:<span style="color:${clr}">${bar.open}</span>  高:<span style="color:${clr}">${bar.high}</span>  ` +
-      `低:<span style="color:${clr}">${bar.low}</span>  收:<span style="color:${clr}">${bar.close}</span>` +
+      `<strong style="color:#fff">${currentName} (${currentSymbol})</strong> &nbsp;時間: ${fmtTime(bar.time)} &nbsp;` +
+      `開:<span style="color:${clr}">${bar.open}</span> &nbsp;高:<span style="color:${clr}">${bar.high}</span> &nbsp;` +
+      `低:<span style="color:${clr}">${bar.low}</span> &nbsp;收:<span style="color:${clr}">${bar.close}</span>` +
       maHtml + bbHtml;
 
     let volMaHtml = '';
@@ -1321,10 +1322,10 @@ function initApp() {
       const vItems = VOL_MA_CONFIG
         .filter(c => ind.volMa[c.period] !== undefined)
         .map(c => `<span style="color:${c.color}">${c.label}:${fmtVol(ind.volMa[c.period])}</span>`);
-      if (vItems.length) volMaHtml = `  |  ${vItems.join('  ')}`;
+      if (vItems.length) volMaHtml = ` &nbsp;|&nbsp; ${vItems.join(' &nbsp;')}`;
     }
 
-    volLegend.innerHTML = `時間: ${fmtTime(bar.time)}  |  成交量: <strong style="color:${clr}">${fmtVol(bar.volume)}</strong>${volMaHtml}`;
+    volLegend.innerHTML = `時間: ${fmtTime(bar.time)} &nbsp;|&nbsp; 成交量: <strong style="color:${clr}">${fmtVol(bar.volume)}</strong>${volMaHtml}`;
   }
 
   function renderAllSeries(candles, fitView = false) {
@@ -1359,7 +1360,10 @@ function initApp() {
         subChart.timeScale().fitContent();
       }
     }
-    requestAnimationFrame(renderAllOverlays);
+    requestAnimationFrame(() => {
+      renderAllOverlays();
+      setTimeout(renderAllOverlays, 80);
+    });
   }
 
   chart.subscribeCrosshairMove(p => {
