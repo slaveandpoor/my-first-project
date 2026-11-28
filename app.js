@@ -53,6 +53,7 @@ function initApp() {
   const intervalSelect = document.getElementById('interval-select'), customInput = document.getElementById('custom-symbol'), searchBtn = document.getElementById('search-btn');
   const favBtn = document.getElementById('fav-btn'), manageFavBtn = document.getElementById('manage-fav-btn');
   const watchlistBackdrop = document.getElementById('watchlist-modal-backdrop');
+  const watchlistModal = document.getElementById('watchlist-modal');
   const closeWlBtn = document.getElementById('close-wl-btn');
   const wlNewGroupInput = document.getElementById('wl-new-group-input');
   const wlAddGroupBtn = document.getElementById('wl-add-group-btn');
@@ -195,6 +196,7 @@ function initApp() {
 
   function renderWatchlistManagerModal() {
     if (!wlGroupsContainer || !wlTargetGroupSelect) return;
+    const prevScrollTop = watchlistModal ? watchlistModal.scrollTop : 0;
     const prevTarget = wlTargetGroupSelect.value;
     wlTargetGroupSelect.innerHTML = '';
     watchlistGroups.forEach(grp => {
@@ -385,6 +387,8 @@ function initApp() {
       card.appendChild(itemsWrap);
       wlGroupsContainer.appendChild(card);
     });
+
+    if (watchlistModal) watchlistModal.scrollTop = prevScrollTop;
   }
 
   let isDrawMode = false, pendingPoint = null, hoverPoint = null;
@@ -401,7 +405,6 @@ function initApp() {
   let isPaneResizing = false;
   let customPaneHeights = null;
 
-  // 先載入本機快取並渲染下拉選單，避免啟動閃爍
   try {
     const cached = JSON.parse(localStorage.getItem(WL_LOCAL_KEY) || 'null');
     watchlistGroups = (Array.isArray(cached) && cached.length) ? cached : cloneDefaultWatchlist();
@@ -2146,7 +2149,6 @@ function initApp() {
     syncingCross = false;
   });
 
-  // 雲端同步自選分類（若雲端尚無資料，自動併入舊版 watchlist_v2 與預設 14 檔美國巨頭並上傳）
   db.collection('user_settings').doc('watchlist_groups_v1').onSnapshot(async doc => {
     if (doc.exists && Array.isArray(doc.data().groups) && doc.data().groups.length > 0) {
       watchlistGroups = doc.data().groups;
@@ -2499,7 +2501,6 @@ function initApp() {
     };
   });
 
-  // 快速加入 / 移除自選
   favBtn.onclick = async () => {
     const existing = findWatchlistItem(currentSymbol);
     if (existing) {
@@ -2521,11 +2522,11 @@ function initApp() {
     }
   };
 
-  // 自選管理視窗控制
   if (manageFavBtn && watchlistBackdrop) {
     manageFavBtn.onclick = () => {
       renderWatchlistManagerModal();
       watchlistBackdrop.classList.add('open');
+      if (watchlistModal) watchlistModal.scrollTop = 0;
     };
   }
   if (closeWlBtn && watchlistBackdrop) {
@@ -2535,6 +2536,12 @@ function initApp() {
     watchlistBackdrop.addEventListener('click', e => {
       if (e.target === watchlistBackdrop) watchlistBackdrop.classList.remove('open');
     });
+    watchlistBackdrop.addEventListener('wheel', e => {
+      if (!watchlistModal) return;
+      const delta = e.deltaY;
+      watchlistModal.scrollTop += delta;
+      e.stopPropagation();
+    }, { passive: true });
   }
   if (wlAddGroupBtn && wlNewGroupInput) {
     wlAddGroupBtn.onclick = async () => {
