@@ -16,11 +16,13 @@
     button { cursor: pointer; }
     button.active { background: #2962ff; color: #fff; }
     button.danger { background: #b22833; color: #fff; }
+    label.chk { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; background: #2a2e39; border: 1px solid #363a45; padding: 4px 8px; border-radius: 4px; cursor: pointer; user-select: none; }
+    label.chk input { width: auto; margin: 0; }
     #charts-wrapper { flex: 1 1 auto; display: flex; flex-direction: column; width: 100%; min-height: 0; overflow: hidden; }
     #chart-container { flex: 4 1 0; width: 100%; min-height: 0; position: relative; border-bottom: 2px solid #363a45; }
     #volume-container { flex: 1 1 0; width: 100%; min-height: 0; position: relative; }
-    #ohlc-legend { position: absolute; top: 8px; left: 12px; z-index: 10; font-size: 13px; background: rgba(19, 23, 34, 0.78); padding: 4px 10px; border-radius: 4px; pointer-events: none; line-height: 1.5; }
-    #vol-legend { position: absolute; top: 4px; left: 12px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.78); padding: 2px 8px; border-radius: 4px; pointer-events: none; color: #9598a1; }
+    #ohlc-legend { position: absolute; top: 8px; left: 12px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.82); padding: 5px 10px; border-radius: 4px; pointer-events: none; line-height: 1.55; max-width: calc(100% - 105px); }
+    #vol-legend { position: absolute; top: 4px; left: 12px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.82); padding: 2px 8px; border-radius: 4px; pointer-events: none; color: #9598a1; }
   </style>
 </head>
 <body>
@@ -74,6 +76,9 @@
       <span id="status-badge">⏳ 啟動中...</span>
     </div>
     <div class="group">
+      <label class="chk"><input type="checkbox" id="toggle-ma" checked /> 均線</label>
+      <label class="chk"><input type="checkbox" id="toggle-bb" checked /> 布林</label>
+      <label class="chk"><input type="checkbox" id="toggle-deduct" checked /> 扣抵▲</label>
       <select id="color-select"><option value="#2962ff">🔵 藍線</option><option value="#26a69a">🟢 綠線</option><option value="#ef5350">🔴 紅線</option><option value="#ffeb3b">🟡 黃線</option></select>
       <button id="draw-hline-btn">➕ 畫水平線</button>
       <button id="clear-lines-btn" class="danger">🗑️ 清除雲端</button>
@@ -83,7 +88,7 @@
     <div id="chart-container"><div id="ohlc-legend">載入中...</div></div>
     <div id="volume-container"><div id="vol-legend">成交量</div></div>
   </div>
-  <script src="./data.js?v=19"></script>
-  <script src="./app.js?v=19"></script>
+  <script src="./data.js?v=20"></script>
+  <script src="./app.js?v=20"></script>
 </body>
 </html>
