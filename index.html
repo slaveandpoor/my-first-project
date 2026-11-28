@@ -13,8 +13,9 @@
     #status-badge { font-size: 12px; padding: 3px 8px; border-radius: 4px; background: #2a2e39; color: #4caf50; max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     select, input, button { background: #2a2e39; color: #d1d4dc; border: 1px solid #363a45; padding: 3px 6px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
     select#symbol-select { max-width: 145px; }
+    select#line-width-select { width: 72px; }
     input#custom-symbol { width: 105px; }
-    input#rect-ratios { width: 115px; font-size: 11px; }
+    input#rect-ratios { width: 110px; font-size: 11px; }
     input[type="color"] { width: 28px; height: 24px; padding: 1px; cursor: pointer; }
     button { cursor: pointer; }
     button.active { background: #2962ff; color: #fff; border-color: #2962ff; }
@@ -90,6 +91,46 @@
     .item-del-btn { background: #8e2430; color: #fff; border: none; padding: 2px 7px; border-radius: 3px; font-size: 11px; }
     .item-del-btn:hover { background: #ef5350; }
 
+    #text-modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    #text-modal-backdrop.open { display: flex; }
+    #text-modal {
+      width: 340px;
+      max-width: 100%;
+      background: #1e222d;
+      border: 1px solid #363a45;
+      border-radius: 6px;
+      padding: 12px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #text-modal h3 { font-size: 14px; color: #fff; }
+    #note-textarea {
+      width: 100%;
+      min-height: 84px;
+      background: #131722;
+      color: #fff;
+      border: 1px solid #363a45;
+      border-radius: 4px;
+      padding: 8px;
+      font-size: 13px;
+      line-height: 1.45;
+      resize: vertical;
+      white-space: pre-wrap;
+    }
+    .modal-btns { display: flex; justify-content: flex-end; gap: 8px; }
+    button.primary { background: #2962ff; color: #fff; border-color: #2962ff; }
+
     @media (max-width: 768px) {
       header {
         flex: 0 0 auto;
@@ -113,8 +154,9 @@
       #status-badge { font-size: 11px; padding: 2px 6px; max-width: 135px; }
       select, input, button, label.chk { font-size: 11px; padding: 3px 5px; }
       select#symbol-select { max-width: 115px; }
+      select#line-width-select { width: 64px; }
       input#custom-symbol { width: 78px; }
-      input#rect-ratios { width: 92px; font-size: 10px; }
+      input#rect-ratios { width: 88px; font-size: 10px; }
       input[type="color"] { width: 24px; height: 22px; }
       .pane-resizer { flex: 0 0 8px; height: 8px; }
       #ohlc-legend {
@@ -206,13 +248,22 @@
         <option value="#ff9800">🟠 橘</option>
       </select>
       <input type="color" id="custom-color" value="#2962ff" title="自訂任意顏色（已選取圖形時可即時變色）" />
+      <select id="line-width-select" title="選擇線條/框線粗細（已選取圖形時可即時調整）">
+        <option value="1">1px</option>
+        <option value="2" selected>2px</option>
+        <option value="3">3px</option>
+        <option value="4">4px</option>
+        <option value="5">5px</option>
+        <option value="6">6px</option>
+      </select>
       <select id="draw-tool-select" title="選擇畫圖工具">
         <option value="hline">➖ 水平切線</option>
         <option value="vline">｜ 垂直切線</option>
         <option value="trend">📈 兩點切線</option>
-        <option value="ray">↗️ 兩點延長切線</option>
+        <option value="ray">↗️ 兩點雙向延長切線</option>
         <option value="ellipse">⭕ 橢圓形</option>
         <option value="rect">⬜ 四方形(倍數)</option>
+        <option value="textBox">💬 中文註記框</option>
       </select>
       <button id="draw-btn">➕ 畫圖</button>
       <input id="rect-ratios" type="text" value="0.333, 0.5, 0.6667" title="四方形倍數(由起點算，逗號分隔，按Enter即時更新)" placeholder="0.333,0.5,0.6667" />
@@ -242,7 +293,19 @@
     <div id="resizer-vol-sub" class="pane-resizer" title="上下拖曳調整成交量圖與技術指標附圖高度"></div>
     <div id="sub-indicator-container"><div id="sub-legend">附圖指標</div></div>
   </div>
-  <script src="./data.js?v=36"></script>
-  <script src="./app.js?v=36"></script>
+
+  <div id="text-modal-backdrop">
+    <div id="text-modal">
+      <h3>💬 輸入繁體中文註記</h3>
+      <textarea id="note-textarea" placeholder="請輸入繁體中文說明（支援換行）..."></textarea>
+      <div class="modal-btns">
+        <button id="note-cancel-btn">取消</button>
+        <button id="note-confirm-btn" class="primary">確定加入</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./data.js?v=37"></script>
+  <script src="./app.js?v=37"></script>
 </body>
 </html>
