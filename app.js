@@ -66,7 +66,7 @@ function initApp() {
   const noteConfirmBtn = document.getElementById('note-confirm-btn');
 
   let isDrawMode = false, pendingPoint = null, hoverPoint = null;
-  let noteModalState = null; // { mode: 'create' | 'edit', p1?, p2?, shapeIndex? }
+  let noteModalState = null;
   let priceLines = [], cloudLines = [], cloudShapes = [];
   let selectedTarget = null;
   let hoveredTarget = null;
@@ -85,6 +85,20 @@ function initApp() {
   function getActiveLineWidth() {
     const w = Number(lineWidthSelect?.value);
     return (!Number.isNaN(w) && w >= 1 && w <= 10) ? w : 2;
+  }
+
+  function calcStartToTargetStats(p1, p2) {
+    const startVal = Number(p1?.price);
+    const targetVal = Number(p2?.price);
+    const diff = Number((startVal - targetVal).toFixed(4));
+    const diffDisplay = Number(diff.toFixed(2));
+    const pct = startVal !== 0 ? ((startVal - targetVal) / startVal) * 100 : null;
+    const pctDisplay = pct !== null ? `${pct >= 0 ? '+' : ''}${Number(pct.toFixed(2))}%` : 'X';
+    return {
+      diff: diffDisplay,
+      diffStr: `${diffDisplay >= 0 ? '+' : ''}${diffDisplay}`,
+      pctDisplay
+    };
   }
 
   function openCreateNoteModal(p1, p2) {
@@ -777,11 +791,12 @@ function initApp() {
       const idx = selectedTarget.index;
       const s = cloudShapes[idx];
       if (s) {
-        if (s.type === 'trend' || s.type === 'ray' || s.type === 'ellipse') {
+        if (s.type === 'trend' || s.type === 'ray' || s.type === 'ellipse' || s.type === 'measure') {
           const p1 = pointToPixel(s.p1), p2 = pointToPixel(s.p2);
           if (p1 && Math.hypot(mx - p1.x, my - p1.y) <= handleTol) return { target: selectedTarget, mode: 'p1' };
           if (p2 && Math.hypot(mx - p2.x, my - p2.y) <= handleTol) return { target: selectedTarget, mode: 'p2' };
-        } else if (s.type === 'rect' || s.type === 'textBox') {
+        }
+        if (s.type === 'rect' || s.type === 'textBox') {
           const p1 = pointToPixel(s.p1), p2 = pointToPixel(s.p2);
           if (p1 && Math.hypot(mx - p1.x, my - p1.y) <= handleTol) return { target: selectedTarget, mode: 'p1' };
           if (p2 && Math.hypot(mx - p2.x, my - p2.y) <= handleTol) return { target: selectedTarget, mode: 'p2' };
@@ -802,7 +817,7 @@ function initApp() {
       if (s.type === 'vline') {
         const p1 = pointToPixel(s.p1);
         if (p1 && Math.abs(mx - p1.x) <= lineTol) return { target: { kind: 'shape', index: i }, mode: 'move' };
-      } else if (s.type === 'trend' || s.type === 'ray') {
+      } else if (s.type === 'trend' || s.type === 'ray' || s.type === 'measure') {
         const p1 = pointToPixel(s.p1), p2 = pointToPixel(s.p2);
         if (p1 && p2) {
           let segStartX = p1.x, segStartY = p1.y, segEndX = p2.x, segEndY = p2.y;
@@ -960,6 +975,45 @@ function initApp() {
         });
         drawTag(`${shape.p1.price}`, p1.x + 6, p1.y - 10, color);
         drawTag(`${shape.p2.price}`, p2.x + 6, p2.y - 10, color);
+      }
+    } else if (shape.type === 'measure') {
+      const p1 = pointToPixel(shape.p1);
+      const p2 = pointToPixel(shape.p2);
+      if (p1 && p2) {
+        drawCtx.save();
+        drawCtx.setLineDash(isPreview ? [5, 4] : [6, 3]);
+        drawCtx.beginPath();
+        drawCtx.moveTo(p1.x, p1.y);
+        drawCtx.lineTo(p2.x, p2.y);
+        drawCtx.stroke();
+        drawCtx.restore();
+
+        drawCtx.setLineDash([]);
+        drawCtx.shadowBlur = 0;
+        [p1, p2].forEach(pt => {
+          drawCtx.beginPath();
+          drawCtx.arc(pt.x, pt.y, isHighlighted ? 5.5 : Math.max(3.5, baseWidth + 1.5), 0, Math.PI * 2);
+          drawCtx.fillStyle = isHighlighted ? '#fff' : color;
+          drawCtx.fill();
+          if (isHighlighted) {
+            drawCtx.strokeStyle = color;
+            drawCtx.lineWidth = 2.2;
+            drawCtx.stroke();
+          }
+        });
+
+        const stats = calcStartToTargetStats(shape.p1, shape.p2);
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+        const summaryLabel = `${stats.pctDisplay} | 差 ${stats.diffStr}`;
+        drawTag(summaryLabel, midX, midY - 12, color, 'center');
+        drawTag(`起 ${shape.p1.price}`, p1.x + 6, p1.y + 11, color);
+        drawTag(`終 ${shape.p2.price}`, p2.x + 6, p2.y + 11, color);
+
+        if (isHighlighted) {
+          drawHandle(p1, color);
+          drawHandle(p2, color);
+        }
       }
     } else if (shape.type === 'ellipse') {
       const p1 = pointToPixel(shape.p1);
@@ -1367,6 +1421,7 @@ function initApp() {
     ray: '兩點雙向延長切線',
     ellipse: '橢圓形',
     rect: '四方形(倍數)',
+    measure: '起終點量測',
     textBox: '註記框'
   };
 
@@ -1378,6 +1433,10 @@ function initApp() {
     if (item.type === 'vline') {
       const tStr = item.p1?.time ? fmtTime(item.p1.time) : `idx:${Math.round(item.p1?.logical || 0)}`;
       return `${name} (${tStr})`;
+    }
+    if (item.type === 'measure') {
+      const st = calcStartToTargetStats(item.p1, item.p2);
+      return `${name} ${st.pctDisplay} (差${st.diffStr})`;
     }
     if (item.type === 'textBox') {
       const preview = (item.text || '').replace(/\n+/g, ' ').slice(0, 14);
@@ -1711,7 +1770,7 @@ function initApp() {
     if (isDrawMode) {
       const toolName = drawToolSelect.options[drawToolSelect.selectedIndex].text;
       statusBadge.style.color = '#ffeb3b';
-      statusBadge.textContent = pendingPoint ? `🟢 ${toolName}：點第2點` : `🟢 ${toolName}：點圖表`;
+      statusBadge.textContent = pendingPoint ? `🟢 ${toolName}：點目標點` : `🟢 ${toolName}：點起始點`;
     } else if (selectedTarget) {
       const item = selectedTarget.kind === 'line' ? cloudLines[selectedTarget.index] : cloudShapes[selectedTarget.index];
       statusBadge.style.color = '#ffeb3b';
