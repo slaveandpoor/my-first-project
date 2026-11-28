@@ -148,6 +148,11 @@
       align-items: center;
     }
     .wl-toolbar input { background: #131722; }
+    .wl-lookup-hint {
+      font-size: 11px;
+      color: #90caf9;
+      min-height: 16px;
+    }
     .wl-body {
       flex: 1 0 auto;
       overflow: visible;
@@ -455,10 +460,12 @@
         <input id="wl-new-group-input" type="text" placeholder="新族群名稱（如：AI概念股）" style="width:170px;" />
         <button id="wl-add-group-btn" class="primary">➕ 新增族群</button>
         <span style="color:#5d606b;">|</span>
-        <input id="wl-add-sym-input" type="text" placeholder="代號（如：AAPL）" style="width:110px;" />
-        <input id="wl-add-name-input" type="text" placeholder="自訂顯示名稱（選填）" style="width:140px;" />
+        <input id="wl-add-sym-input" type="text" placeholder="代號（如：4958）" style="width:110px;" />
+        <button id="wl-lookup-name-btn" type="button">🔍 查名稱</button>
+        <input id="wl-add-name-input" type="text" placeholder="查詢後可自行修改名稱" style="width:155px;" />
         <select id="wl-target-group-select" style="max-width:130px;"></select>
         <button id="wl-add-item-btn">加入自選</button>
+        <div id="wl-lookup-hint" class="wl-lookup-hint" style="width:100%;"></div>
       </div>
       <div id="watchlist-groups-container" class="wl-body"></div>
     </div>
@@ -476,7 +483,7 @@
     </div>
   </div>
 
-  <script src="./data.js?v=44"></script>
-  <script src="./app.js?v=44"></script>
+  <script src="./data.js?v=45"></script>
+  <script src="./app.js?v=45"></script>
 </body>
 </html>
