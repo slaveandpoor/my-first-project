@@ -38,6 +38,7 @@ function initApp() {
     appId: "1:465125050422:web:4c2b050ab549c675767097"
   });
   const db = firebase.firestore();
+  const chartsWrapper = document.getElementById('charts-wrapper');
   const chartContainer = document.getElementById('chart-container');
   const volumeContainer = document.getElementById('volume-container');
   const subIndicatorContainer = document.getElementById('sub-indicator-container');
@@ -68,6 +69,89 @@ function initApp() {
   let unsub = null, liveTimer = null, favMap = {}, lastCandles = [], syncingCross = false, indicators = null;
   let subDataMap = new Map();
   let keyboardBarIndex = -1;
+  let isPaneResizing = false;
+  let customPaneHeights = null; // { main, vol, sub }
+
+  const isMobile = () => window.innerWidth <= 768;
+  const getPriceScaleWidth = () => (isMobile() ? 58 : 80);
+
+  const baseOpts = {
+    autoSize: false,
+    layout: { background: { color: '#131722' }, textColor: '#d1d4dc', fontSize: isMobile() ? 10 : 12 },
+    grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
+    rightPriceScale: { borderColor: '#2a2e39', minimumWidth: getPriceScaleWidth() },
+    crosshair: { mode: 1 }
+  };
+  const chart = LightweightCharts.createChart(chartContainer, {
+    ...baseOpts,
+    rightPriceScale: {
+      borderColor: '#2a2e39',
+      minimumWidth: getPriceScaleWidth(),
+      scaleMargins: { top: 0.14, bottom: 0.08 }
+    },
+    timeScale: { visible: false }
+  });
+  const volChart = LightweightCharts.createChart(volumeContainer, {
+    ...baseOpts,
+    timeScale: { visible: false }
+  });
+  const subChart = LightweightCharts.createChart(subIndicatorContainer, {
+    ...baseOpts,
+    timeScale: { borderColor: '#2a2e39', timeVisible: true }
+  });
+
+  function syncAllChartSizes() {
+    const w = Math.max(1, chartsWrapper.clientWidth);
+    const hasSub = subIndicatorContainer.style.display !== 'none';
+
+    if (customPaneHeights) {
+      const mH = Math.max(70, Math.round(customPaneHeights.main));
+      const vH = Math.max(45, Math.round(customPaneHeights.vol));
+      const sH = hasSub ? Math.max(45, Math.round(customPaneHeights.sub)) : 0;
+
+      chartContainer.style.flex = `0 0 ${mH}px`;
+      chartContainer.style.height = `${mH}px`;
+      volumeContainer.style.flex = `0 0 ${vH}px`;
+      volumeContainer.style.height = `${vH}px`;
+
+      if (hasSub) {
+        subIndicatorContainer.style.flex = `0 0 ${sH}px`;
+        subIndicatorContainer.style.height = `${sH}px`;
+      } else {
+        subIndicatorContainer.style.flex = '0 0 0px';
+        subIndicatorContainer.style.height = '0px';
+      }
+
+      chart.resize(w, mH);
+      volChart.resize(w, vH);
+      if (hasSub) subChart.resize(w, sH);
+    } else {
+      chartContainer.style.flex = '3.4 1 0';
+      chartContainer.style.height = '';
+      volumeContainer.style.flex = '1 1 0';
+      volumeContainer.style.height = '';
+      if (hasSub) {
+        subIndicatorContainer.style.flex = '1.25 1 0';
+        subIndicatorContainer.style.height = '';
+      } else {
+        subIndicatorContainer.style.flex = '0 0 0px';
+        subIndicatorContainer.style.height = '0px';
+      }
+
+      requestAnimationFrame(() => {
+        const mH = Math.max(70, Math.floor(chartContainer.clientHeight));
+        const vH = Math.max(45, Math.floor(volumeContainer.clientHeight));
+        const sH = hasSub ? Math.max(45, Math.floor(subIndicatorContainer.clientHeight)) : 0;
+        chart.resize(w, mH);
+        volChart.resize(w, vH);
+        if (hasSub) subChart.resize(w, sH);
+        resizeCanvas();
+      });
+      return;
+    }
+
+    resizeCanvas();
+  }
 
   function setupPaneResizer(resizerEl, topPane, bottomPane) {
     let active = false;
@@ -75,39 +159,55 @@ function initApp() {
     let startTopH = 0;
     let startBottomH = 0;
 
+    const getPaneKey = el => {
+      if (el === chartContainer) return 'main';
+      if (el === volumeContainer) return 'vol';
+      return 'sub';
+    };
+
     const onStart = clientY => {
       if (bottomPane.style.display === 'none') return;
+      const hasSub = subIndicatorContainer.style.display !== 'none';
+      customPaneHeights = {
+        main: Math.max(70, chartContainer.getBoundingClientRect().height),
+        vol: Math.max(45, volumeContainer.getBoundingClientRect().height),
+        sub: hasSub ? Math.max(45, subIndicatorContainer.getBoundingClientRect().height) : 0
+      };
       active = true;
+      isPaneResizing = true;
       startY = clientY;
-      startTopH = topPane.getBoundingClientRect().height;
-      startBottomH = bottomPane.getBoundingClientRect().height;
+      startTopH = customPaneHeights[getPaneKey(topPane)];
+      startBottomH = customPaneHeights[getPaneKey(bottomPane)];
       resizerEl.classList.add('dragging');
       document.body.style.userSelect = 'none';
       document.body.style.cursor = 'ns-resize';
+      [chart, volChart, subChart].forEach(c => c.applyOptions({ handleScroll: false, handleScale: false }));
     };
 
     const onMove = clientY => {
-      if (!active) return;
+      if (!active || !customPaneHeights) return;
       const dy = clientY - startY;
-      const minTop = parseFloat(getComputedStyle(topPane).minHeight) || 50;
-      const minBottom = parseFloat(getComputedStyle(bottomPane).minHeight) || 45;
+      const minTop = getPaneKey(topPane) === 'main' ? 70 : 45;
+      const minBottom = getPaneKey(bottomPane) === 'main' ? 70 : 45;
       const totalH = startTopH + startBottomH;
 
       const newTopH = Math.max(minTop, Math.min(totalH - minBottom, startTopH + dy));
       const newBottomH = totalH - newTopH;
 
-      topPane.style.flex = `${newTopH} 1 0px`;
-      bottomPane.style.flex = `${newBottomH} 1 0px`;
-      requestAnimationFrame(renderDrawings);
+      customPaneHeights[getPaneKey(topPane)] = newTopH;
+      customPaneHeights[getPaneKey(bottomPane)] = newBottomH;
+      syncAllChartSizes();
     };
 
     const onEnd = () => {
       if (!active) return;
       active = false;
+      isPaneResizing = false;
       resizerEl.classList.remove('dragging');
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
-      requestAnimationFrame(renderDrawings);
+      [chart, volChart, subChart].forEach(c => c.applyOptions({ handleScroll: true, handleScale: true }));
+      syncAllChartSizes();
     };
 
     resizerEl.addEventListener('mousedown', e => {
@@ -134,34 +234,6 @@ function initApp() {
   setupPaneResizer(resizerMainVol, chartContainer, volumeContainer);
   setupPaneResizer(resizerVolSub, volumeContainer, subIndicatorContainer);
 
-  const isMobile = () => window.innerWidth <= 768;
-  const getPriceScaleWidth = () => (isMobile() ? 58 : 80);
-
-  const baseOpts = {
-    autoSize: true,
-    layout: { background: { color: '#131722' }, textColor: '#d1d4dc', fontSize: isMobile() ? 10 : 12 },
-    grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
-    rightPriceScale: { borderColor: '#2a2e39', minimumWidth: getPriceScaleWidth() },
-    crosshair: { mode: 1 }
-  };
-  const chart = LightweightCharts.createChart(chartContainer, {
-    ...baseOpts,
-    rightPriceScale: {
-      borderColor: '#2a2e39',
-      minimumWidth: getPriceScaleWidth(),
-      scaleMargins: { top: 0.14, bottom: 0.08 }
-    },
-    timeScale: { visible: false }
-  });
-  const volChart = LightweightCharts.createChart(volumeContainer, {
-    ...baseOpts,
-    timeScale: { visible: false }
-  });
-  const subChart = LightweightCharts.createChart(subIndicatorContainer, {
-    ...baseOpts,
-    timeScale: { borderColor: '#2a2e39', timeVisible: true }
-  });
-
   function applyResponsiveChartOpts() {
     const mw = getPriceScaleWidth();
     const fs = isMobile() ? 10 : 12;
@@ -171,6 +243,7 @@ function initApp() {
         rightPriceScale: { minimumWidth: mw }
       });
     });
+    syncAllChartSizes();
   }
   window.addEventListener('resize', applyResponsiveChartOpts);
 
@@ -272,29 +345,29 @@ function initApp() {
     const h = Number(bar.high);
     const l = Number(bar.low);
     const c = Number(bar.close);
-    const fmtNum = n => Number(n.toFixed(2));
+    const fmtDec = (n, digits) => Number(n.toFixed(digits)).toFixed(digits);
     const fmtPct = n => `${Number((n * 100).toFixed(2))}%`;
 
     // 1. 實體K百分比: (收-開)/開
     const bodyPct = o !== 0 ? fmtPct((c - o) / o) : 'X';
 
-    // 2. 影線百分比:
+    // 2. 影線占比（小數點顯示，取到小數點第 2 位）:
     //    收-開>0 ((高-收)+(開-低))/(高-低)
     //    收-開<0 ((高-開)+(收-低))/(高-低)
     //    收-開=0 X
-    let shadowPct = 'X';
+    let shadowRatio = 'X';
     const diffCO = c - o;
     const rangeHL = h - l;
     if (diffCO > 0 && rangeHL !== 0) {
-      shadowPct = fmtPct(((h - c) + (o - l)) / rangeHL);
+      shadowRatio = fmtDec(((h - c) + (o - l)) / rangeHL, 2);
     } else if (diffCO < 0 && rangeHL !== 0) {
-      shadowPct = fmtPct(((h - o) + (c - l)) / rangeHL);
+      shadowRatio = fmtDec(((h - o) + (c - l)) / rangeHL, 2);
     }
 
     // 3. 高低差百分比: (高-低)/開
     const rangePct = o !== 0 ? fmtPct((h - l) / o) : 'X';
 
-    // 4. 上下影線百分比:
+    // 4. 上下影線比（取到小數點第 1 位）:
     //    收-開>0 且 (高-收)>(開-低) 則 (高-收)/(開-低)
     //    收-開>0 且 (高-收)=<(開-低) 則 (開-低)/(高-收)
     //    收-開=<0 且 (高-開)>(收-低) 則 (高-開)/(收-低)
@@ -305,21 +378,21 @@ function initApp() {
       const a = h - c;
       const b = o - l;
       if (a > b) {
-        upperLowerShadowRatio = b !== 0 ? `${fmtNum(a / b)}` : 'X';
+        upperLowerShadowRatio = b !== 0 ? fmtDec(a / b, 1) : 'X';
       } else {
-        upperLowerShadowRatio = a !== 0 ? `${fmtNum(b / a)}` : 'X';
+        upperLowerShadowRatio = a !== 0 ? fmtDec(b / a, 1) : 'X';
       }
     } else {
       const a = h - o;
       const b = c - l;
       if (a > b) {
-        upperLowerShadowRatio = b !== 0 ? `${fmtNum(a / b)}` : 'X';
+        upperLowerShadowRatio = b !== 0 ? fmtDec(a / b, 1) : 'X';
       } else {
-        upperLowerShadowRatio = a !== 0 ? `${fmtNum(b / a)}` : 'X';
+        upperLowerShadowRatio = a !== 0 ? fmtDec(b / a, 1) : 'X';
       }
     }
 
-    return { bodyPct, shadowPct, rangePct, upperLowerShadowRatio };
+    return { bodyPct, shadowRatio, rangePct, upperLowerShadowRatio };
   }
 
   function calcEMA(values, period) {
@@ -366,6 +439,7 @@ function initApp() {
       subIndicatorContainer.style.display = 'none';
       resizerVolSub.style.display = 'none';
       volChart.applyOptions({ timeScale: { visible: true, borderColor: '#2a2e39', timeVisible: true } });
+      syncAllChartSizes();
       return;
     }
 
@@ -373,6 +447,7 @@ function initApp() {
     resizerVolSub.style.display = 'block';
     volChart.applyOptions({ timeScale: { visible: false } });
     subChart.applyOptions({ timeScale: { visible: true, borderColor: '#2a2e39', timeVisible: true } });
+    syncAllChartSizes();
 
     if (!candles.length) {
       subLegend.textContent = '附圖指標：無資料';
@@ -553,7 +628,9 @@ function initApp() {
     drawCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     renderDrawings();
   }
-  new ResizeObserver(resizeCanvas).observe(chartContainer);
+  new ResizeObserver(() => {
+    if (!isPaneResizing) syncAllChartSizes();
+  }).observe(chartsWrapper);
 
   function logicalToTime(logical) {
     if (!lastCandles.length || logical == null) return null;
@@ -1264,7 +1341,7 @@ function initApp() {
     const metricsHtml =
       `<br/>` +
       `<span style="color:#ffd54f">實體K%:${m.bodyPct}</span>  ` +
-      `<span style="color:#81d4fa">影線%:${m.shadowPct}</span>  ` +
+      `<span style="color:#81d4fa">影線占比:${m.shadowRatio}</span>  ` +
       `<span style="color:#ce93d8">高低差%:${m.rangePct}</span>  ` +
       `<span style="color:#a5d6a7">上下影線比:${m.upperLowerShadowRatio}</span>`;
 
@@ -1317,6 +1394,7 @@ function initApp() {
         subChart.timeScale().fitContent();
       }
     }
+    syncAllChartSizes();
     requestAnimationFrame(renderDrawings);
   }
 
