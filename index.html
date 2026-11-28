@@ -22,11 +22,45 @@
     button:disabled { opacity: 0.45; cursor: not-allowed; }
     label.chk { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; background: #2a2e39; border: 1px solid #363a45; padding: 3px 6px; border-radius: 4px; cursor: pointer; user-select: none; white-space: nowrap; }
     label.chk input { width: auto; margin: 0; }
+
     #charts-wrapper { flex: 1 1 auto; display: flex; flex-direction: column; width: 100%; min-height: 0; overflow: hidden; }
-    #chart-container { flex: 3.4 1 0; width: 100%; min-height: 0; position: relative; border-bottom: 2px solid #363a45; touch-action: none; }
+    #chart-container { flex: 3.4 1 0; width: 100%; min-height: 70px; position: relative; touch-action: none; }
     #draw-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 6; pointer-events: none; }
-    #volume-container { flex: 1 1 0; width: 100%; min-height: 0; position: relative; border-bottom: 2px solid #363a45; touch-action: none; }
-    #sub-indicator-container { flex: 1.25 1 0; width: 100%; min-height: 0; position: relative; touch-action: none; }
+    #volume-container { flex: 1 1 0; width: 100%; min-height: 45px; position: relative; touch-action: none; }
+    #sub-indicator-container { flex: 1.25 1 0; width: 100%; min-height: 45px; position: relative; touch-action: none; }
+
+    /* 可任意拖曳調整主附圖高度的分隔條 */
+    .pane-resizer {
+      flex: 0 0 6px;
+      height: 6px;
+      width: 100%;
+      background: #1e222d;
+      border-top: 1px solid #363a45;
+      border-bottom: 1px solid #363a45;
+      cursor: ns-resize;
+      position: relative;
+      z-index: 15;
+      touch-action: none;
+      transition: background 0.15s;
+    }
+    .pane-resizer::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 36px;
+      height: 2px;
+      border-radius: 2px;
+      background: #5d606b;
+    }
+    .pane-resizer:hover, .pane-resizer.dragging {
+      background: #2962ff;
+    }
+    .pane-resizer:hover::after, .pane-resizer.dragging::after {
+      background: #ffffff;
+    }
+
     #ohlc-legend { position: absolute; top: 8px; left: 10px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.84); padding: 5px 9px; border-radius: 4px; pointer-events: none; line-height: 1.5; max-width: calc(100% - 92px); }
     #vol-legend { position: absolute; top: 4px; left: 10px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.84); padding: 2px 8px; border-radius: 4px; pointer-events: none; color: #9598a1; max-width: calc(100% - 92px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #sub-legend { position: absolute; top: 4px; left: 10px; z-index: 10; font-size: 12px; background: rgba(19, 23, 34, 0.84); padding: 2px 8px; border-radius: 4px; pointer-events: none; color: #d1d4dc; max-width: calc(100% - 92px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -83,9 +117,7 @@
       input#custom-symbol { width: 78px; }
       input#rect-ratios { width: 92px; font-size: 10px; }
       input[type="color"] { width: 24px; height: 22px; }
-      #chart-container { flex: 3.1 1 0; }
-      #volume-container { flex: 1.05 1 0; }
-      #sub-indicator-container { flex: 1.25 1 0; }
+      .pane-resizer { flex: 0 0 8px; height: 8px; }
       #ohlc-legend {
         top: 4px;
         left: 6px;
@@ -206,10 +238,12 @@
         <div id="drawings-list"></div>
       </div>
     </div>
+    <div id="resizer-main-vol" class="pane-resizer" title="上下拖曳調整主圖與成交量圖高度"></div>
     <div id="volume-container"><div id="vol-legend">成交量</div></div>
+    <div id="resizer-vol-sub" class="pane-resizer" title="上下拖曳調整成交量圖與技術指標附圖高度"></div>
     <div id="sub-indicator-container"><div id="sub-legend">附圖指標</div></div>
   </div>
-  <script src="./data.js?v=27"></script>
-  <script src="./app.js?v=27"></script>
+  <script src="./data.js?v=28"></script>
+  <script src="./app.js?v=28"></script>
 </body>
 </html>
